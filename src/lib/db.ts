@@ -44,7 +44,24 @@ export type DiceLogEntry = {
   createdAt: string;
 };
 
-type Db = { users: User[]; homunculi?: StoredHomunculus[]; diceLog?: DiceLogEntry[] };
+/** Planning des sessions : un sondage de dates proposé par le MJ. */
+export type PollAnswer = "yes" | "maybe" | "no";
+/** Créneau en heure locale de la table : date "AAAA-MM-JJ", heures "HH:MM" (fin facultative, peut passer minuit). */
+export type PollSlot = { id: string; date: string; start: string; end: string | null };
+export type Poll = {
+  id: string;
+  title: string;
+  note: string;
+  slots: PollSlot[];
+  /** userId → (slotId → réponse) */
+  responses: Record<string, Record<string, PollAnswer>>;
+  status: "open" | "confirmed" | "closed";
+  confirmedSlotId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Db = { users: User[]; homunculi?: StoredHomunculus[]; diceLog?: DiceLogEntry[]; polls?: Poll[] };
 
 const DB_PATH = path.join(process.cwd(), "data", "db.json");
 
@@ -100,6 +117,10 @@ export async function getHomunculi(ownerId: string): Promise<StoredHomunculus[]>
 
 export async function getAllHomunculi(): Promise<StoredHomunculus[]> {
   return ((await load()).homunculi ?? []).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export async function getPolls(): Promise<Poll[]> {
+  return (await load()).polls ?? [];
 }
 
 export async function getDiceLog(userId: string, tool: string): Promise<DiceLogEntry[]> {

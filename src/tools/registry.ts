@@ -4,6 +4,8 @@
 import type { ComponentType } from "react";
 import DiceRoller from "./dice/DiceRoller";
 import HomunculusTool from "./homunculus/HomunculusTool";
+import Planning from "./planning/Planning";
+import { PLANNING_TOOL_ID } from "./planning/types";
 import { TOOL_META as HOMUNCULUS_META } from "./homunculus-creator/meta";
 
 /** Infos du joueur transmises à chaque outil (jamais son code). */
@@ -40,6 +42,13 @@ export const TOOLS: ToolDefinition[] = [
     icon: "✨",
     component: HomunculusTool,
     wide: true,
+  },
+  {
+    id: PLANNING_TOOL_ID, // "planning"
+    name: "Planning des sessions",
+    description: "Le MJ propose des dates et des horaires, chacun indique ses disponibilités.",
+    icon: "📅",
+    component: Planning,
   },
   // { id: "mon-outil", name: "Mon outil", description: "…", icon: "🗺️", component: MonOutil },
 ];

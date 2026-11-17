@@ -86,6 +86,7 @@ export async function deletePlayer(formData: FormData): Promise<void> {
     // Données d'outils liées au joueur.
     db.homunculi = (db.homunculi ?? []).filter((h) => h.ownerId !== id);
     db.diceLog = (db.diceLog ?? []).filter((d) => d.userId !== id);
+    for (const poll of db.polls ?? []) delete poll.responses[id];
   });
   back("/admin", { ok: name ? `${name} supprimé.` : "Joueur introuvable." });
 }

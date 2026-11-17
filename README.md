@@ -50,6 +50,14 @@ Option `wide: true` dans le registre : page pleine largeur, sans carte ni titre 
   Le joueur ne peut pas le changer (vérifié aussi côté serveur). Le MJ, lui, choisit librement.
 - **Revue MJ** : la page du joueur liste ses fiches (étapes, relances) ; « Voir » les affiche en lecture seule.
 
+## Planning des sessions (`src/tools/planning/`)
+
+- Le MJ crée un sondage (titre, note, créneaux date + heure de début + heure de fin facultative), puis retient
+  un créneau, en ajoute ou en retire, archive ou supprime.
+- Les joueurs ayant l'outil répondent Oui / Peut-être / Non par créneau et voient les réponses des autres.
+  Une session retenue s'ajoute à l'agenda (fichier .ics).
+- Données : `polls` dans db.json. Les heures sont stockées telles quelles (heure locale de la table).
+
 ## Administration
 
 - `/admin` : résumé, création de joueur, liste des joueurs (recherche dès 5 joueurs, clic sur le code pour le copier).
