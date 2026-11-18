@@ -3,25 +3,31 @@
 
 import { useEffect, useState } from "react";
 import { DICE, critical, loadHistory, roll, saveHistory, type Roll } from "./roll";
+import { Sparks, tumble, useRolling } from "./RollingNumber";
 
 export default function QuickRoll() {
   const [history, setHistory] = useState<Roll[]>([]);
+  const [fresh, setFresh] = useState(false);
   useEffect(() => setHistory(loadHistory()), []);
 
   const launch = (faces: number) => {
     const r = roll(`1d${faces}`);
-    if (r) setHistory(saveHistory([r, ...loadHistory()]));
+    if (!r) return;
+    setFresh(true);
+    setHistory(saveHistory([r, ...loadHistory()]));
   };
 
   const last = history[0];
-  const crit = critical(last);
+  const { shown, settled } = useRolling(last, fresh);
+  const crit = settled ? critical(last) : null;
 
   return (
     <div className="quick-roll">
-      <div className={`quick-result${crit ? ` ${crit}` : ""}`} aria-live="polite">
+      <div className={`quick-result${crit ? ` ${crit}` : ""}${settled ? "" : " rolling"}`} aria-live="polite" aria-busy={!settled}>
         {last ? (
           <div key={last.id} className="dice-result-inner">
-            <span className="quick-total">{last.total}</span>
+            {crit === "crit" && <Sparks />}
+            <span className="quick-total">{shown}</span>
             <span className="label">{last.formula}</span>
           </div>
         ) : (
@@ -30,7 +36,15 @@ export default function QuickRoll() {
       </div>
       <div className="quick-dice">
         {DICE.map((f) => (
-          <button key={f} type="button" className="die-btn die-btn-sm" onClick={() => launch(f)}>
+          <button
+            key={f}
+            type="button"
+            className="die-btn die-btn-sm"
+            onClick={(e) => {
+              tumble(e.currentTarget);
+              launch(f);
+            }}
+          >
             <span className="die-face">d{f}</span>
           </button>
         ))}

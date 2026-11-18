@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
+import Spotlight from "@/components/Spotlight";
 import "./globals.css";
 
 const display = Fraunces({ subsets: ["latin"], variable: "--font-display", display: "swap" });
@@ -18,7 +19,16 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" className={`${display.variable} ${sans.variable}`}>
-      <body>{children}</body>
+      <body>
+        {/* Fond animé : aurore + étoiles (purement décoratif). */}
+        <div className="sky" aria-hidden="true">
+          <span className="aurora" />
+          <span className="stars" />
+          <span className="stars stars-2" />
+        </div>
+        <Spotlight />
+        {children}
+      </body>
     </html>
   );
 }

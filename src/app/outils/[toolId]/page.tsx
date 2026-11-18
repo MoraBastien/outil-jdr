@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireUser, canUseTool } from "@/lib/auth";
 import { getTool } from "@/tools/registry";
 import Header from "@/components/Header";
+import PageMain from "@/components/PageMain";
 
 export default async function ToolPage({ params }: { params: Promise<{ toolId: string }> }) {
   const { toolId } = await params;
@@ -25,10 +26,10 @@ export default async function ToolPage({ params }: { params: Promise<{ toolId: s
     return (
       <>
         <Header user={user} />
-        <main className="page page-wide stack">
+        <PageMain className="page page-wide stack">
           {crumbs}
           <Tool player={player} />
-        </main>
+        </PageMain>
       </>
     );
   }
@@ -36,10 +37,10 @@ export default async function ToolPage({ params }: { params: Promise<{ toolId: s
   return (
     <>
       <Header user={user} />
-      <main className="page stack-lg">
+      <PageMain className="page stack-lg">
         <div className="page-head">
           {crumbs}
-          <h1 className="title">
+          <h1 className="title" style={{ viewTransitionName: `tool-${tool.id}`, width: "fit-content" }}>
             <span className="title-icon" aria-hidden="true">
               {tool.icon}
             </span>{" "}
@@ -50,7 +51,7 @@ export default async function ToolPage({ params }: { params: Promise<{ toolId: s
         <section className="card card-lg">
           <Tool player={player} />
         </section>
-      </main>
+      </PageMain>
     </>
   );
 }

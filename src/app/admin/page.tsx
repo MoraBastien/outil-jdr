@@ -3,10 +3,12 @@ import { getUsers, getAllHomunculi } from "@/lib/db";
 import { TOOLS } from "@/tools/registry";
 import Header from "@/components/Header";
 import Flash from "@/components/Flash";
+import CountUp from "@/components/CountUp";
 import { clampEcho } from "@/tools/homunculus/echo";
 import { TOOL_META as HOMUNCULUS_META } from "@/tools/homunculus-creator/meta";
 import { createPlayer } from "./actions";
 import PlayerList, { type PlayerRow } from "./PlayerList";
+import PageMain from "@/components/PageMain";
 
 export default async function AdminPage({
   searchParams,
@@ -43,7 +45,7 @@ export default async function AdminPage({
   return (
     <>
       <Header user={admin} />
-      <main className="page stack-lg">
+      <PageMain className="page stack-lg">
         <div className="page-head">
           <p className="eyebrow">Administration</p>
           <h1 className="title">Joueurs &amp; outils</h1>
@@ -56,7 +58,7 @@ export default async function AdminPage({
         <section className="stat-grid" aria-label="Résumé">
           {stats.map((s) => (
             <div key={s.label} className="stat">
-              <span className="stat-value">{s.value}</span>
+              <CountUp className="stat-value" value={s.value} />
               <span className="label">{s.label}</span>
             </div>
           ))}
@@ -84,7 +86,7 @@ export default async function AdminPage({
           <h2 className="subtitle">Joueurs</h2>
           <PlayerList players={rows} />
         </section>
-      </main>
+      </PageMain>
     </>
   );
 }

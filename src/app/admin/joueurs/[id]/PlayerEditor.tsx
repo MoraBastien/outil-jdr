@@ -228,8 +228,8 @@ export default function PlayerEditor({
         </label>
       </section>
 
-      <div className="save-bar">
-        <span className="muted small">{dirty ? "Modifications non enregistrées" : "Tout est enregistré"}</span>
+      <div className={`save-bar${dirty ? " dirty" : ""}`}>
+        <span className="muted small save-status">{dirty ? "Modifications non enregistrées" : "Tout est enregistré"}</span>
         <SaveButton />
       </div>
     </form>

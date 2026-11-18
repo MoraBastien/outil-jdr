@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import { HomunculusCreator, normalize, type HomunculusState } from "@/tools/homunculus-creator";
 import { MAX_ECHO } from "@/tools/homunculus/echo";
 import { formatDate } from "../../../../homunculus";
+import PageMain from "@/components/PageMain";
 
 export default async function SheetPage({ params }: { params: Promise<{ id: string; sheetId: string }> }) {
   const admin = await requireAdmin();
@@ -21,7 +22,7 @@ export default async function SheetPage({ params }: { params: Promise<{ id: stri
   return (
     <>
       <Header user={admin} />
-      <main className="page page-wide stack">
+      <PageMain className="page page-wide stack">
         <nav className="breadcrumbs" aria-label="Fil d'Ariane">
           <Link href="/admin">Administration</Link> <span aria-hidden="true">/</span>{" "}
           <Link href={`/admin/joueurs/${player.id}`}>{player.name}</Link> <span aria-hidden="true">/</span>{" "}
@@ -41,7 +42,7 @@ export default async function SheetPage({ params }: { params: Promise<{ id: stri
           ambient
           showBeta={false}
         />
-      </main>
+      </PageMain>
     </>
   );
 }

@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import Widget from "@/components/Widget";
 import { clampEcho } from "@/tools/homunculus/echo";
 import { TOOL_META as HOMUNCULUS_META } from "@/tools/homunculus-creator/meta";
+import PageMain from "@/components/PageMain";
 
 function greeting(): string {
   const hour = Number(new Intl.DateTimeFormat("fr-FR", { hour: "numeric", hour12: false, timeZone: "Europe/Paris" }).format(new Date()));
@@ -31,7 +32,7 @@ export default async function HomePage() {
   return (
     <>
       <Header user={user} />
-      <main className="page page-dash stack-lg">
+      <PageMain className="page page-dash stack-lg">
         <section className="hero">
           <p className="eyebrow">{greeting()}</p>
           <h1 className="title">{isAdmin ? "Maître du jeu" : user.name}</h1>
@@ -49,7 +50,7 @@ export default async function HomePage() {
             {widgets.map((t) => {
               const W = t.widget!.component;
               return (
-                <Widget key={t.id} title={t.widget!.title ?? t.name} icon={t.icon} href={`/outils/${t.id}`} wide={t.widget!.wide}>
+                <Widget key={t.id} title={t.widget!.title ?? t.name} icon={t.icon} href={`/outils/${t.id}`} wide={t.widget!.wide} transitionName={`tool-${t.id}`}>
                   <W user={user} />
                 </Widget>
               );
@@ -94,7 +95,7 @@ export default async function HomePage() {
             )}
           </div>
         )}
-      </main>
+      </PageMain>
     </>
   );
 }

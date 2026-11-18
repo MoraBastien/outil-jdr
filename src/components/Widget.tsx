@@ -9,24 +9,29 @@ export default function Widget({
   icon,
   href,
   wide,
+  transitionName,
   children,
 }: {
   title: string;
   icon: string;
   href?: string;
   wide?: boolean;
+  /** Nom de transition partagé avec le titre de la page de l'outil (morphing entre les pages). */
+  transitionName?: string;
   children: ReactNode;
 }) {
   return (
     <section className={`widget${wide ? " widget-wide" : ""}`} aria-label={title}>
       <header className="widget-head">
-        <span className="widget-icon" aria-hidden="true">
-          {icon}
+        <span className="widget-label" style={transitionName ? { viewTransitionName: transitionName } : undefined}>
+          <span className="widget-icon" aria-hidden="true">
+            {icon}
+          </span>
+          <h2 className="widget-title">{title}</h2>
         </span>
-        <h2 className="widget-title">{title}</h2>
         {href && (
           <Link href={href} className="widget-link">
-            Ouvrir →
+            Ouvrir <span className="arrow">→</span>
           </Link>
         )}
       </header>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ToolPlayer } from "../registry";
 import { DICE, critical, loadHistory, roll, saveHistory, signed, type Roll } from "./roll";
+import { Sparks, tumble, useRolling } from "./RollingNumber";
 
 const formulaOf = (count: number, faces: number, mod: number) =>
   `${count}d${faces}${mod ? (mod > 0 ? `+${mod}` : `${mod}`) : ""}`;
@@ -44,6 +45,8 @@ export default function DiceRoller({ player }: { player: ToolPlayer }) {
   const [formula, setFormula] = useState("");
   const [history, setHistory] = useState<Roll[]>([]);
   const [error, setError] = useState("");
+  // Vrai seulement pour un jet fait maintenant (pas pour l'historique rechargé).
+  const [fresh, setFresh] = useState(false);
 
   useEffect(() => setHistory(loadHistory()), []);
   const save = (h: Roll[]) => setHistory(saveHistory(h));
@@ -55,12 +58,15 @@ export default function DiceRoller({ player }: { player: ToolPlayer }) {
       return;
     }
     setError("");
+    setFresh(true);
     save([r, ...history]);
   }
 
   const last = history[0];
-  const crit = critical(last) === "crit";
-  const fumble = critical(last) === "fumble";
+  const { shown, settled } = useRolling(last, fresh);
+  // Les effets (couleur, éclats, tremblement) attendent que le dé se soit arrêté.
+  const crit = settled && critical(last) === "crit";
+  const fumble = settled && critical(last) === "fumble";
 
   return (
     <div className="dice">
@@ -74,7 +80,15 @@ export default function DiceRoller({ player }: { player: ToolPlayer }) {
 
         <div className="dice-tray">
           {DICE.map((f) => (
-            <button key={f} type="button" className="die-btn" onClick={() => launch(formulaOf(count, f, modifier))}>
+            <button
+              key={f}
+              type="button"
+              className="die-btn"
+              onClick={(e) => {
+                tumble(e.currentTarget);
+                launch(formulaOf(count, f, modifier));
+              }}
+            >
               <span className="die-face">d{f}</span>
               {(count > 1 || modifier !== 0) && <span className="die-hint">{formulaOf(count, f, modifier)}</span>}
             </button>
@@ -102,17 +116,26 @@ export default function DiceRoller({ player }: { player: ToolPlayer }) {
         {error && <p className="error">{error}</p>}
       </div>
 
-      <div className={`dice-result${crit ? " crit" : ""}${fumble ? " fumble" : ""}`} aria-live="polite">
+      <div
+        className={`dice-result${crit ? " crit" : ""}${fumble ? " fumble" : ""}${settled ? "" : " rolling"}`}
+        aria-live="polite"
+        aria-busy={!settled}
+      >
         {last ? (
           <div key={last.id} className="dice-result-inner">
+            {crit && <Sparks />}
             <span className="label">{last.formula}</span>
-            <span className="dice-total">{last.total}</span>
-            {crit && <span className="chip chip-ok">Réussite critique !</span>}
-            {fumble && <span className="chip chip-danger">Échec critique…</span>}
-            {(last.rolls.length > 1 || last.modifier !== 0) && (
+            <span className="dice-total">{shown}</span>
+            {crit && <span className="chip chip-ok pop">Réussite critique !</span>}
+            {fumble && <span className="chip chip-danger pop">Échec critique…</span>}
+            {settled && (last.rolls.length > 1 || last.modifier !== 0) && (
               <div className="dice-detail">
                 {last.rolls.map((v, i) => (
-                  <span key={i} className={`die-value${v === last.faces ? " max" : v === 1 ? " min" : ""}`}>
+                  <span
+                    key={i}
+                    className={`die-value${v === last.faces ? " max" : v === 1 ? " min" : ""}`}
+                    style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }}
+                  >
                     {v}
                   </span>
                 ))}

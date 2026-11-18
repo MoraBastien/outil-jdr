@@ -10,6 +10,7 @@ import { TOOL_META as HOMUNCULUS_META } from "@/tools/homunculus-creator/meta";
 import { deletePlayer, deleteHomunculus } from "../../actions";
 import { summarize, formatDate } from "../../homunculus";
 import PlayerEditor, { type EditorPlayer } from "./PlayerEditor";
+import PageMain from "@/components/PageMain";
 
 export default async function PlayerPage({
   params,
@@ -38,7 +39,7 @@ export default async function PlayerPage({
   return (
     <>
       <Header user={admin} />
-      <main className="page stack-lg">
+      <PageMain className="page stack-lg">
         <div className="page-head">
           <nav className="breadcrumbs" aria-label="Fil d'Ariane">
             <Link href="/admin">Administration</Link> <span aria-hidden="true">/</span> <span aria-current="page">{player.name}</span>
@@ -129,7 +130,7 @@ export default async function PlayerPage({
             </form>
           </details>
         </section>
-      </main>
+      </PageMain>
     </>
   );
 }
