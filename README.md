@@ -23,6 +23,14 @@ Site Next.js pour donner des outils de jeu de rôle aux joueurs.
 Au premier lancement, `data/db.json` est créé avec le compte MJ. Le code admin se change ensuite
 directement dans ce fichier. **Sauvegarde ce fichier** : il contient tous les joueurs (il est exclu de git).
 
+## Navigation (`src/components/Header.tsx`, `AppNav.tsx`)
+
+- Ordinateur : barre latérale, outils rangés par rubrique (Campagne, Création, Outils, Maître du jeu).
+- Téléphone : barre d'onglets en bas (accueil + 3 outils principaux) et bouton « Menu » qui ouvre un tiroir avec tout.
+- Partout : recherche rapide `Ctrl + K` / `⌘K` (bibliothèque `cmdk`) ; le MJ y retrouve aussi chaque joueur.
+- Chaque outil du registre indique sa rubrique (`section`) et un libellé court (`short`) pour la barre mobile. L'ordre
+  est fixé par `PRIORITY` dans `Header.tsx`.
+
 ## Ajouter un outil
 
 1. Créer le composant dans `src/tools/<id>/MonOutil.tsx` (avec `"use client"` s'il est interactif).

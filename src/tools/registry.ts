@@ -58,7 +58,19 @@ export type ToolDefinition = {
   wide?: boolean;
   /** Panneau facultatif pour le tableau de bord. */
   widget?: ToolWidget;
+  /** Rubrique de la navigation. */
+  section: NavSection;
+  /** Libellé court (barre d'onglets du téléphone). */
+  short: string;
 };
+
+/** Rubriques de la navigation, dans l'ordre d'affichage. */
+export const NAV_SECTIONS = [
+  { id: "campagne", label: "Campagne" },
+  { id: "creation", label: "Création" },
+  { id: "outils", label: "Outils" },
+] as const;
+export type NavSection = (typeof NAV_SECTIONS)[number]["id"];
 
 export const TOOLS: ToolDefinition[] = [
   {
@@ -67,6 +79,8 @@ export const TOOLS: ToolDefinition[] = [
     description: "Lance des dés (d4, d6, d20…) ou une formule comme 2d6+3.",
     icon: "🎲",
     component: DiceRoller,
+    section: "outils",
+    short: "Dés",
     widget: { component: DiceWidget, title: "Jet rapide", order: 30 },
   },
   {
@@ -75,6 +89,8 @@ export const TOOLS: ToolDefinition[] = [
     description: "Crée ton homunculus pour les one-shots de Rigel Sterne : matière, classe, dés, Anomalie, Fêlure.",
     icon: "✨",
     component: HomunculusTool,
+    section: "creation",
+    short: "Atelier",
     wide: true,
     widget: { component: HomunculusWidget, title: "Mes homunculus", order: 20 },
   },
@@ -84,6 +100,8 @@ export const TOOLS: ToolDefinition[] = [
     description: "Le MJ propose des dates à chaque groupe, chacun indique ses disponibilités.",
     icon: "📅",
     component: Planning,
+    section: "campagne",
+    short: "Planning",
     widget: { component: PlanningWidget, title: "Prochaines sessions", wide: true, order: 10 },
   },
   {
@@ -92,6 +110,8 @@ export const TOOLS: ToolDefinition[] = [
     description: "Ta fiche D&D (règles 2024) : création guidée, explications et montée de niveau pas à pas.",
     icon: "🛡️",
     component: CharacterTool,
+    section: "campagne",
+    short: "Fiche",
     wide: true,
     widget: { component: CharacterWidget, title: "Mes personnages", adminTitle: "Personnages de la table", wide: true, order: 5 },
   },
@@ -101,6 +121,8 @@ export const TOOLS: ToolDefinition[] = [
     description: "Expérimente la création de personnages et garde tes essais. Ici, c'est toi qui choisis le niveau.",
     icon: "🗝️",
     component: VaultTool,
+    section: "creation",
+    short: "Coffre",
     wide: true,
   },
   {
@@ -109,6 +131,8 @@ export const TOOLS: ToolDefinition[] = [
     description: "Les héros tombés de ta campagne, et leur épitaphe.",
     icon: "🪦",
     component: Cemetery,
+    section: "campagne",
+    short: "Cimetière",
     widget: { component: CemeteryWidget, title: "Cimetière", order: 40 },
   },
   // { id: "mon-outil", name: "Mon outil", description: "…", icon: "🗺️", component: MonOutil, widget: { component: MonWidget } },

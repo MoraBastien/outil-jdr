@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireUser, canUseTool } from "@/lib/auth";
 import { TOOLS } from "@/tools/registry";
 import Header from "@/components/Header";
@@ -74,25 +73,6 @@ export default async function HomePage() {
               </Widget>
             )}
 
-            {tools.length > 0 && (
-              <Widget title="Tous les outils" icon="🧰">
-                <ul className="tool-links">
-                  {tools.map((t) => (
-                    <li key={t.id}>
-                      <Link href={`/outils/${t.id}`} className="tool-link">
-                        <span className="tool-icon" aria-hidden="true">
-                          {t.icon}
-                        </span>
-                        <span className="stack-xs">
-                          <strong>{t.name}</strong>
-                          <span className="muted small">{t.description}</span>
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </Widget>
-            )}
           </div>
         )}
       </PageMain>
