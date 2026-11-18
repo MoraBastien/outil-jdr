@@ -1473,3 +1473,81 @@ summary.pl-section-title { cursor: pointer; }
 .cem-w-epitaph { font: italic 0.9rem/1.4 var(--font-title); color: #d8d2e4; }
 .cem-w-empty { display: flex; align-items: center; gap: 12px; }
 .cem-w-empty span { font-size: 1.6rem; animation: float 5s ease-in-out infinite; }
+
+/* ---------- Préparer le prochain niveau ---------- */
+.cs-prepare {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; border-radius: var(--radius);
+  border: 1px dashed var(--border-strong); background: var(--surface); animation: rise 0.5s var(--ease) both;
+  transition: border-color 0.3s, background-color 0.3s;
+}
+.cs-prepare .stack-xs { flex: 1; min-width: 200px; }
+.cs-prepare.ready { border-style: solid; border-color: rgba(120, 204, 140, 0.45); background: linear-gradient(120deg, var(--ok-soft), transparent 70%); }
+.cs-prepare-badge {
+  width: 40px; height: 40px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%;
+  font-family: var(--font-title); font-size: 1.2rem; font-weight: 600; color: var(--accent-strong);
+  border: 1px solid rgba(226, 180, 95, 0.45); background: var(--accent-soft);
+}
+.cs-prepare.ready .cs-prepare-badge { color: var(--ok); border-color: rgba(120, 204, 140, 0.5); background: var(--ok-soft); animation: pop 0.4s var(--ease) both; }
+.lu-prepared { margin: 0; padding: 8px 12px; border-radius: var(--radius-sm); color: var(--ok); background: var(--ok-soft); font-size: 0.9rem; }
+.lu-foundry-note { margin: 0; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--accent-soft); border: 1px solid rgba(226, 180, 95, 0.3); font-size: 0.92rem; }
+
+/* ---------- À reporter dans Foundry ---------- */
+.cs-foundry {
+  display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; border-radius: var(--radius);
+  border: 1px solid rgba(226, 180, 95, 0.4); background: linear-gradient(160deg, rgba(226, 180, 95, 0.1), var(--surface) 60%);
+  animation: rise 0.5s var(--ease) both; transition: border-color 0.4s;
+}
+.cs-foundry.all { border-color: rgba(120, 204, 140, 0.5); }
+.cs-foundry-bar { width: 120px; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; flex: 0 0 auto; }
+.cs-foundry-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--ok)); border-radius: inherit; transition: width 0.4s var(--ease); }
+.cs-foundry-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cs-foundry-list .check { align-items: flex-start; padding: 8px 10px; border-radius: var(--radius-sm); transition: background-color 0.15s; line-height: 1.4; }
+.cs-foundry-list .check:hover { background: var(--surface-2); }
+.cs-foundry-list .check input { margin-top: 1px; flex: 0 0 auto; }
+.cs-foundry-list .check.done span { color: var(--muted); text-decoration: line-through; text-decoration-color: rgba(166, 158, 180, 0.6); }
+
+/* ---------- Propositions venues du coffre ---------- */
+.cs-proposal {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 14px 18px; border-radius: var(--radius);
+  border: 1px solid rgba(226, 180, 95, 0.4); background: var(--accent-soft); animation: rise 0.5s var(--ease) both;
+}
+.cs-proposal > span:first-child { font-size: 1.5rem; }
+.cs-proposal .stack-xs { flex: 1; min-width: 200px; }
+.cs-proposal em { font-family: var(--font-title); }
+.cs-proposal.refused { border-color: rgba(239, 111, 100, 0.4); background: var(--danger-soft); }
+.cs-proposal-review {
+  display: flex; flex-direction: column; gap: 16px; padding: 20px; border-radius: var(--radius);
+  border: 1px solid var(--accent); background: linear-gradient(140deg, rgba(226, 180, 95, 0.14), var(--surface) 65%); box-shadow: var(--shadow);
+}
+.cs-proposal-msg { margin: 6px 0 0; padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; font-family: var(--font-title); }
+.vault-propose {
+  display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; border-radius: var(--radius);
+  border: 1px solid var(--accent); background: var(--surface); box-shadow: var(--shadow); animation: rise 0.35s var(--ease) both;
+}
+.vault-card .chip { margin-top: 2px; }
+
+/* ---------- Planning : habitudes ---------- */
+.pl-weekly { padding: 0; }
+.pl-weekly > summary { list-style: none; cursor: pointer; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pl-weekly > summary::-webkit-details-marker { display: none; }
+.pl-weekly > summary::after { content: "▾"; color: var(--muted); transition: transform 0.25s var(--ease); }
+.pl-weekly[open] > summary::after { transform: rotate(180deg); }
+.pl-weekly > .stack { padding: 0 18px 18px; }
+.pl-weekly-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 20px; }
+.pl-weekly-grid li { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pl-weekly-day { font-weight: 500; }
+.pl-answer.auto[aria-pressed="true"] { opacity: 0.7; background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgba(0, 0, 0, 0.12) 6px 12px); }
+.pl-auto { color: var(--muted); font-style: italic; }
+
+/* ---------- Widget fiche : rappels ---------- */
+.cs-widget-hint {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 6px 12px; border-radius: 999px; font-size: 0.86rem;
+  color: var(--accent-strong); background: var(--accent-soft); border: 1px solid rgba(226, 180, 95, 0.3); transition: background-color 0.2s, border-color 0.2s;
+}
+.cs-widget-hint:hover { border-color: var(--accent); background: rgba(226, 180, 95, 0.2); }
+.pl-weekly-grid .pl-answers { flex: 0 0 auto; }
+.pl-weekly-grid .pl-answer { white-space: nowrap; }
+@media (max-width: 480px) {
+  .pl-weekly-grid .pl-answer { padding: 7px 11px; font-size: 0.86rem; }
+  .pl-weekly-day { font-size: 0.92rem; }
+}

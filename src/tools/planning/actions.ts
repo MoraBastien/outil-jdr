@@ -2,8 +2,9 @@
 // Actions serveur du planning des sessions. Chaque action vérifie l'accès et renvoie les données à jour.
 
 import { requireUser, canUseTool } from "@/lib/auth";
-import { getUsers, getPolls, getGroups, updateDb, randomUUID, type Db, type PollSlot, type User } from "@/lib/db";
+import { getUsers, getPolls, getGroups, updateDb, randomUUID, type Db, type Poll, type PollSlot, type User } from "@/lib/db";
 import { membersOf, userGroupIds, visibleGroups } from "@/lib/groups";
+import { tableToday } from "./summary";
 import { PLANNING_TOOL_ID, type PlanningData, type PlanningResult, type PollAnswer, type SlotInput } from "./types";
 
 const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -27,8 +28,66 @@ async function view(user: User): Promise<PlanningData> {
   const ids = new Set(groups.map((g) => g.id));
   // Joueur : seulement les sondages de ses groupes. MJ : tout, y compris les anciens sondages sans groupe.
   const polls = user.role === "admin" ? allPolls.filter((p) => !p.groupId || ids.has(p.groupId)) : allPolls.filter((p) => p.groupId && ids.has(p.groupId));
-  return { me: { id: user.id, isAdmin: user.role === "admin" }, groups, polls };
+  return { me: { id: user.id, isAdmin: user.role === "admin", weekly: normalizeWeekly(user.weekly) }, groups, polls };
 }
+
+/* ---------- Disponibilités habituelles ---------- */
+
+const normalizeWeekly = (w: unknown): (PollAnswer | null)[] =>
+  Array.from({ length: 7 }, (_, i) => {
+    const v = Array.isArray(w) ? w[i] : null;
+    return ANSWERS.includes(v as PollAnswer) ? (v as PollAnswer) : null;
+  });
+
+/** Jour de la semaine d'une date "AAAA-MM-JJ" (0 = dimanche). */
+const weekday = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay();
+
+/**
+ * Pré-remplit les réponses d'un sondage ouvert d'après les disponibilités habituelles des membres.
+ * Une réponse donnée à la main n'est jamais modifiée ; une réponse pré-remplie suit les habitudes.
+ */
+function autofill(db: Db, poll: Poll, only?: User) {
+  if (poll.status !== "open" || !poll.groupId) return;
+  const today = tableToday();
+  const members = only ? [only] : membersOf(db.users, poll.groupId);
+  for (const u of members) {
+    const weekly = normalizeWeekly(u.weekly);
+    const auto = new Set(poll.autoFilled?.[u.id] ?? []);
+    const answers = { ...(poll.responses[u.id] ?? {}) };
+    for (const s of poll.slots) {
+      if (s.date < today || (answers[s.id] && !auto.has(s.id))) continue;
+      const pref = weekly[weekday(s.date)];
+      if (pref) {
+        answers[s.id] = pref;
+        auto.add(s.id);
+      } else if (auto.has(s.id)) {
+        delete answers[s.id];
+        auto.delete(s.id);
+      }
+    }
+    if (Object.keys(answers).length) poll.responses[u.id] = answers;
+    else delete poll.responses[u.id];
+    const kept = [...auto].filter((id) => poll.slots.some((s) => s.id === id));
+    if (kept.length) (poll.autoFilled ??= {})[u.id] = kept;
+    else if (poll.autoFilled) delete poll.autoFilled[u.id];
+  }
+}
+
+/** Le joueur enregistre ses disponibilités habituelles ; ses sondages ouverts sont pré-remplis aussitôt. */
+export async function setWeeklyAction(weekly: (PollAnswer | null)[]): Promise<PlanningResult> {
+  const user = await requireToolUser();
+  if (user.role !== "player") return { ok: false, error: "Réservé aux joueurs." };
+  const clean = normalizeWeekly(weekly);
+  const me = await updateDb((db) => {
+    const u = db.users.find((x) => x.id === user.id)!;
+    u.weekly = clean.some(Boolean) ? clean : undefined;
+    const groups = userGroupIds(u);
+    for (const poll of db.polls ?? []) if (poll.groupId && groups.includes(poll.groupId)) autofill(db, poll, u);
+    return u;
+  });
+  return { ok: true, data: await view(me) };
+}
+
 
 function cleanSlot(input: unknown): PollSlot | string {
   const s = (input ?? {}) as Partial<SlotInput>;
@@ -71,7 +130,7 @@ export async function createPollAction(input: { groupId: string; title: string; 
   }
   return adminChange((db, now) => {
     if (!(db.groups ?? []).some((g) => g.id === groupId)) return "Choisis le groupe concerné.";
-    (db.polls ??= []).push({
+    const poll: Poll = {
       id: randomUUID(),
       groupId,
       title,
@@ -82,7 +141,9 @@ export async function createPollAction(input: { groupId: string; title: string; 
       confirmedSlotId: null,
       createdAt: now,
       updatedAt: now,
-    });
+    };
+    autofill(db, poll);
+    (db.polls ??= []).push(poll);
     return null;
   });
 }
@@ -96,6 +157,7 @@ export async function addSlotAction(pollId: string, input: SlotInput): Promise<P
     if (poll.slots.length >= MAX_SLOTS) return `${MAX_SLOTS} créneaux maximum.`;
     if (poll.slots.some((s) => s.date === slot.date && s.start === slot.start)) return "Ce créneau existe déjà.";
     poll.slots.push(slot);
+    autofill(db, poll);
     poll.updatedAt = now;
     return null;
   });
@@ -172,6 +234,9 @@ export async function answerAction(pollId: string, slotId: string, answer: PollA
     const mine = (poll.responses[user.id] ??= {});
     if (answer) mine[slotId] = answer;
     else delete mine[slotId];
+    // Réponse donnée à la main : elle ne suit plus les disponibilités habituelles.
+    const auto = poll.autoFilled?.[user.id];
+    if (auto) poll.autoFilled![user.id] = auto.filter((id) => id !== slotId);
     return null;
   });
   return error ? { ok: false, error } : { ok: true, data: await view(user) };

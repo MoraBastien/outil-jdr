@@ -6,6 +6,7 @@ import type { ToolPlayer } from "../registry";
 import CreationWizard from "../character/components/CreationWizard";
 import LevelUpWizard from "../character/components/LevelUpWizard";
 import Sheet from "../character/components/Sheet";
+import { proposalBlocker } from "../character/proposal";
 import { shortLabel } from "../character/rules";
 import { MAX_LEVEL } from "../character/types";
 import {
@@ -14,24 +15,29 @@ import {
   duplicateDraftAction,
   getVaultAction,
   levelUpDraftAction,
+  proposeDraftAction,
   revertDraftAction,
   saveDraftAction,
+  withdrawProposalAction,
+  type VaultData,
   type VaultEntry,
+  type VaultGroup,
   type VaultResult,
 } from "./actions";
 
 type Screen = { kind: "list" } | { kind: "new" } | { kind: "open"; id: string };
 
 export default function VaultTool({ player }: { player: ToolPlayer }) {
-  const [entries, setEntries] = useState<VaultEntry[] | null>(null);
+  const [vault, setVault] = useState<VaultData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [screen, setScreen] = useState<Screen>({ kind: "list" });
   const [levelUpOpen, setLevelUpOpen] = useState(false);
+  const [proposeOpen, setProposeOpen] = useState(false);
 
   useEffect(() => {
     getVaultAction()
-      .then(setEntries)
+      .then(setVault)
       .catch(() => setError("Impossible d'ouvrir le coffre."));
   }, []);
 
@@ -41,7 +47,7 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
         try {
           const r = await p;
           if (r.ok) {
-            setEntries(r.entries);
+            setVault({ entries: r.entries, groups: r.groups });
             setError(null);
           } else setError(r.error);
           resolve(r);
@@ -52,7 +58,7 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
       });
     });
 
-  if (!entries) {
+  if (!vault) {
     return error ? (
       <p className="flash flash-error">{error}</p>
     ) : (
@@ -64,6 +70,7 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
     );
   }
 
+  const { entries, groups } = vault;
   const errorBox = error && (
     <p className="flash flash-error" role="alert">
       {error}
@@ -104,7 +111,7 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
     return (
       <div className="cs-root stack-lg">
         <div className="vault-bar">
-          <button type="button" className="btn btn-ghost btn-small" onClick={() => (setScreen({ kind: "list" }), setLevelUpOpen(false))}>
+          <button type="button" className="btn btn-ghost btn-small" onClick={() => (setScreen({ kind: "list" }), setLevelUpOpen(false), setProposeOpen(false))}>
             ← Retour au coffre
           </button>
           <div className="vault-levels" role="group" aria-label="Niveau de l'essai">
@@ -134,6 +141,11 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
             })}
           </div>
           <div className="pl-actions">
+            {groups.length > 0 && (
+              <button type="button" className="btn btn-small" onClick={() => setProposeOpen((o) => !o)} aria-expanded={proposeOpen}>
+                🗝️ Proposer au MJ
+              </button>
+            )}
             <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => run(duplicateDraftAction(record.id))}>
               Dupliquer
             </button>
@@ -156,6 +168,19 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
           🗝️ Essai du coffre : tu choisis toi-même ton niveau, et tu peux revenir en arrière à tout moment. Rien ici n&apos;affecte tes fiches de campagne.
         </p>
         {errorBox}
+        <ProposalStatus draftId={record.id} groups={groups} busy={busy} onWithdraw={(g) => run(withdrawProposalAction(g))} />
+        {proposeOpen && (
+          <ProposeForm
+            entry={open}
+            groups={groups}
+            busy={busy}
+            onCancel={() => setProposeOpen(false)}
+            onSend={async (groupId, message) => {
+              const r = await run(proposeDraftAction(record.id, groupId, message));
+              if (r?.ok) setProposeOpen(false);
+            }}
+          />
+        )}
         <Sheet
           key={record.id}
           record={record}
@@ -214,9 +239,114 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
             <strong className="vault-name">{record.state.name}</strong>
             <span className="muted small">{shortLabel(record.state)}</span>
             <span className="muted small">Modifié le {new Date(record.updatedAt).toLocaleDateString("fr-FR")}</span>
+            {groups
+              .filter((g) => g.proposal?.draftId === record.id)
+              .map((g) => (
+                <span key={g.id} className={`chip ${g.proposal!.status === "refused" ? "chip-danger" : "chip-accent"}`}>
+                  {g.proposal!.status === "refused" ? "Refusé" : "Proposé"} · {g.name}
+                </span>
+              ))}
           </button>
         ))}
       </div>
     </div>
+  );
+}
+
+/* ---------- Proposer un essai au MJ ---------- */
+
+function ProposalStatus({ draftId, groups, busy, onWithdraw }: { draftId: string; groups: VaultGroup[]; busy: boolean; onWithdraw: (groupId: string) => void }) {
+  const mine = groups.filter((g) => g.proposal?.draftId === draftId);
+  if (mine.length === 0) return null;
+  return (
+    <>
+      {mine.map((g) => {
+        const refused = g.proposal!.status === "refused";
+        return (
+          <div key={g.id} className={`cs-proposal${refused ? " refused" : ""}`}>
+            <span aria-hidden="true">{refused ? "✗" : "⏳"}</span>
+            <div className="stack-xs">
+              <strong>{refused ? `Ton MJ n'a pas retenu cet essai pour « ${g.name} ».` : `Proposé pour « ${g.name} » : en attente de ton MJ.`}</strong>
+              {refused && g.proposal!.reason && <em>« {g.proposal!.reason} »</em>}
+              {refused && <span className="muted small">Ajuste ton essai et propose-le à nouveau si tu veux.</span>}
+            </div>
+            <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => onWithdraw(g.id)}>
+              {refused ? "Effacer" : "Retirer"}
+            </button>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function ProposeForm({
+  entry,
+  groups,
+  busy,
+  onCancel,
+  onSend,
+}: {
+  entry: VaultEntry;
+  groups: VaultGroup[];
+  busy: boolean;
+  onCancel: () => void;
+  onSend: (groupId: string, message: string) => void;
+}) {
+  const s = entry.record.state;
+  const blocker = proposalBlocker(s);
+  const choices = groups.filter((g) => !g.hasCharacter);
+  const [groupId, setGroupId] = useState(choices[0]?.id ?? "");
+  const [message, setMessage] = useState("");
+  const replacing = groups.find((g) => g.id === groupId)?.proposal;
+
+  return (
+    <form
+      className="vault-propose"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (groupId) onSend(groupId, message);
+      }}
+    >
+      <strong>Proposer {s.name} à ton MJ</strong>
+      <p className="muted small">
+        Pour remplacer un personnage tombé, ou rejoindre un groupe où tu n&apos;as pas encore de personnage. Ton MJ voit la fiche et accepte ou
+        refuse. Règles de campagne : pas de valeurs libres, et les PV des niveaux au-delà du 1er sont recalculés à la moyenne (dans le coffre, on peut
+        relancer).
+      </p>
+      {blocker ? (
+        <p className="flash flash-error">{blocker}</p>
+      ) : choices.length === 0 ? (
+        <p className="flash flash-error">Tu as déjà un personnage dans chacun de tes groupes. Une proposition sert quand ton personnage est mort ou absent.</p>
+      ) : (
+        <>
+          <label className="field">
+            <span className="label">Pour le groupe</span>
+            <select className="input" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+              {choices.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {replacing && <p className="muted small">Cette proposition remplacera « {replacing.name} » pour ce groupe.</p>}
+          <label className="field">
+            <span className="label">Un mot pour ton MJ (facultatif)</span>
+            <textarea className="input textarea" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} maxLength={1000} placeholder="Ex. Le frère cadet de Brunhilde, venu la venger." />
+          </label>
+        </>
+      )}
+      <div className="pl-actions">
+        {!blocker && choices.length > 0 && (
+          <button className="btn btn-small" disabled={busy || !groupId}>
+            Envoyer la proposition
+          </button>
+        )}
+        <button type="button" className="btn btn-ghost btn-small" onClick={onCancel}>
+          Annuler
+        </button>
+      </div>
+    </form>
   );
 }

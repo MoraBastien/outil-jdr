@@ -20,6 +20,11 @@ export type User = {
   echo?: number;
   /** Groupes de jeu du joueur (voir `groups`). Donnent accès au planning et aux fiches de personnage. */
   groupIds?: string[];
+  /**
+   * Disponibilités habituelles, par jour de la semaine (index 0 = dimanche, comme Date.getDay()).
+   * Servent à pré-remplir les réponses aux sondages du planning. `null` = pas d'habitude.
+   */
+  weekly?: (PollAnswer | null)[];
   profile: {
     fields: ProfileField[];
     notes: string;
@@ -60,6 +65,8 @@ export type Poll = {
   slots: PollSlot[];
   /** userId → (slotId → réponse) */
   responses: Record<string, Record<string, PollAnswer>>;
+  /** userId → créneaux dont la réponse a été pré-remplie d'après ses disponibilités habituelles. */
+  autoFilled?: Record<string, string[]>;
   status: "open" | "confirmed" | "closed";
   confirmedSlotId: string | null;
   createdAt: string;
@@ -79,6 +86,28 @@ export type StoredCharacter = {
   deadAt?: string;
   /** Copie de la fiche à chaque niveau atteint (archive du MJ). */
   snapshots: { level: number; at: string; state: unknown }[];
+  /** Choix du prochain niveau, préparés par le joueur avant que le MJ ne l'accorde. */
+  prepared?: PreparedLevelUp;
+  /** Ce que le joueur doit reporter dans Foundry après sa dernière montée de niveau. */
+  foundryTodo?: FoundryTodo;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PreparedLevelUp = { level: number; answers: Record<string, string[]>; hpMode: "average" | "roll"; at: string };
+export type FoundryTodo = { level: number; items: { text: string; done: boolean }[] };
+
+/** Personnage du coffre proposé au MJ pour rejoindre une campagne. `state` = copie figée au moment de la proposition. */
+export type Proposal = {
+  id: string;
+  ownerId: string;
+  groupId: string;
+  draftId: string;
+  state: unknown;
+  message: string;
+  status: "pending" | "refused";
+  /** Réponse du MJ en cas de refus. */
+  reason?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -109,6 +138,7 @@ export type Db = {
   /** Coffre : les essais de création des joueurs (hors groupe, niveau libre). */
   vault?: StoredCharacter[];
   graves?: Grave[];
+  proposals?: Proposal[];
 };
 
 // ---------------------------------------------------------------------------
@@ -259,6 +289,10 @@ export async function getGraves(): Promise<Grave[]> {
 
 export async function getGroups(): Promise<Group[]> {
   return ((await load()).groups ?? []).sort((a, b) => a.name.localeCompare(b.name, "fr"));
+}
+
+export async function getProposals(): Promise<Proposal[]> {
+  return (await load()).proposals ?? [];
 }
 
 export async function getPolls(): Promise<Poll[]> {

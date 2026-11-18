@@ -15,7 +15,8 @@ export type PlanningGroup = {
 };
 
 export type PlanningData = {
-  me: { id: string; isAdmin: boolean };
+  /** `weekly` : disponibilités habituelles du joueur, index 0 = dimanche. */
+  me: { id: string; isAdmin: boolean; weekly: (PollAnswer | null)[] };
   /** Groupes visibles : tous pour le MJ, ceux du joueur sinon. */
   groups: PlanningGroup[];
   /** Sondages de ces groupes (le MJ voit aussi les anciens sondages sans groupe). */

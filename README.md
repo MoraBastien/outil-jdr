@@ -98,6 +98,14 @@ Option `wide: true` dans le registre : page pleine largeur, sans carte ni titre 
 - Les joueurs ayant l'outil répondent Oui / Peut-être / Non par créneau et voient les réponses des autres.
   Une session retenue s'ajoute à l'agenda (fichier .ics).
 - Données : `polls` dans db.json. Les heures sont stockées telles quelles (heure locale de la table).
+- **Disponibilités habituelles** : chaque joueur indique, par jour de la semaine, Oui / Peut-être / Non
+  (`users[].weekly`, index 0 = dimanche). Ses réponses aux sondages ouverts sont pré-remplies pour ces jours-là, à la
+  création d'un sondage, à l'ajout d'un créneau et quand il change ses habitudes. Une réponse donnée à la main n'est
+  jamais écrasée ; les réponses pré-remplies sont repérées dans `polls[].autoFilled` et marquées « d'après tes habitudes ».
+
+## Installation sur téléphone
+
+Le site peut être ajouté à l'écran d'accueil comme une application (`src/app/manifest.ts`, icônes dans `public/icons/`).
 
 ## Fiche de personnage D&D 5.5 (`src/tools/character/`)
 
@@ -108,6 +116,12 @@ Option `wide: true` dans le registre : page pleine largeur, sans carte ni titre 
 - **Montée de niveau** : le MJ clique « Accorder le niveau N » dans l'outil. Le bouton « Monter de niveau » s'allume
   sur le tableau de bord du joueur et ouvre un assistant (nouvelles capacités, PV moyens ou dé lancé par le serveur,
   choix, récapitulatif). Niveau maximum : 4 (`MAX_LEVEL` dans `types.ts`).
+- **Préparer à l'avance** : avant que le niveau soit accordé, le joueur peut faire ses choix (carte « Prochain niveau »).
+  Ils sont vérifiés par le serveur et gardés dans `characters[].prepared` ; le jour venu, l'assistant s'ouvre
+  directement sur le récapitulatif. Le MJ voit « Choix du niv. N prêts » dans sa liste.
+- **À reporter dans Foundry** : après chaque montée de niveau, une liste à cocher (`foundry.ts`, stockée dans
+  `characters[].foundryTodo`) rappelle ce qu'il faut refaire sur la fiche Foundry VTT : niveau de classe, PV (moyenne ou
+  dé lancé ici), choix, sorts. Le tableau de bord rappelle ce qu'il reste à faire.
 - **Copie du MJ** : la fiche est stockée dans `characters` (db.json / Redis), avec une copie à chaque niveau
   (`snapshots`), consultable et téléchargeable (JSON) dans l'outil.
 - **Règles** : `rules.ts` calcule la fiche (modificateurs, CA, PV, sorts…) et valide la création et les montées de
@@ -125,6 +139,11 @@ Option `wide: true` dans le registre : page pleine largeur, sans carte ni titre 
   (apparence, idéaux, liens, défauts, histoire, notes). Les valeurs libres sont refusées par le serveur hors du coffre.
 - Le joueur choisit son niveau : il monte sans accord du MJ, et peut revenir à un niveau précédent (on restaure la
   copie de ce niveau en gardant ses textes et son équipement). Il peut aussi dupliquer ou supprimer un essai.
+- **Proposer au MJ** : un essai peut être proposé pour un groupe où le joueur n'a pas de personnage vivant (après une
+  mort, ou en arrivant). Règles de campagne (`character/proposal.ts`) : pas de valeurs libres, et les PV des niveaux
+  au-delà du 1er sont recalculés à la moyenne (le coffre permet de relancer). La proposition (`proposals` dans db.json)
+  est une copie figée : le MJ l'examine dans l'outil Fiche, l'accepte (elle devient la fiche du joueur, au niveau
+  proposé) ou la refuse avec un mot d'explication.
 
 ## Cimetière (`src/tools/cemetery/`)
 

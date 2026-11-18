@@ -12,6 +12,7 @@ import {
   setPollGroupAction,
   deletePollAction,
   answerAction,
+  setWeeklyAction,
 } from "./actions";
 import {
   ANSWER_LABELS,
@@ -296,6 +297,7 @@ function PollCard({ poll, data, now, h }: { poll: Poll; data: PlanningData; now:
         {slots.map((s) => {
           const t = tally(s.id);
           const mine = poll.responses[me.id]?.[s.id] ?? null;
+          const auto = Boolean(mine && poll.autoFilled?.[me.id]?.includes(s.id));
           const past = isPast(s, now);
           const isBest = poll.status === "open" && best > 0 && score(s.id) === best && !past;
           const isChosen = s.id === poll.confirmedSlotId;
@@ -341,14 +343,19 @@ function PollCard({ poll, data, now, h }: { poll: Poll; data: PlanningData; now:
                       <button
                         key={a}
                         type="button"
-                        className={`pl-answer ${a}`}
+                        className={`pl-answer ${a}${auto ? " auto" : ""}`}
                         aria-pressed={mine === a}
-                        onClick={() => h.answer(poll.id, s.id, mine === a ? null : a)}
+                        onClick={() => h.answer(poll.id, s.id, mine === a && !auto ? null : a)}
                       >
                         {ANSWER_LABELS[a]}
                       </button>
                     ))}
                   </div>
+                )}
+                {!isAdmin && isParticipant && poll.status === "open" && !past && auto && (
+                  <span className="pl-auto small" title="Pré-rempli d'après tes disponibilités habituelles. Clique pour confirmer ou changer.">
+                    ↻ d&apos;après tes habitudes
+                  </span>
                 )}
                 {!isAdmin && mine && poll.status !== "open" && <span className="muted small">Ta réponse : {ANSWER_LABELS[mine]}</span>}
                 {isAdmin && poll.status !== "closed" && (
@@ -467,7 +474,8 @@ export default function Planning({ player }: { player: ToolPlayer }) {
           const mine = { ...(p.responses[d.me.id] ?? {}) };
           if (a) mine[slotId] = a;
           else delete mine[slotId];
-          return { ...p, responses: { ...p.responses, [d.me.id]: mine } };
+          const auto = (p.autoFilled?.[d.me.id] ?? []).filter((id) => id !== slotId);
+          return { ...p, responses: { ...p.responses, [d.me.id]: mine }, autoFilled: { ...p.autoFilled, [d.me.id]: auto } };
         }),
       };
     });
@@ -489,6 +497,7 @@ export default function Planning({ player }: { player: ToolPlayer }) {
           Salut {player.name}, indique quand tu es disponible{multi ? " pour chacun de tes groupes" : ""}.
         </p>
       )}
+      {!data.me.isAdmin && <WeeklyCard weekly={data.me.weekly} busy={busy} onSave={(w) => run(setWeeklyAction(w))} />}
       {data.me.isAdmin && data.groups.length === 0 && (
         <p className="flash flash-error">Aucun groupe de jeu : crée un groupe et ajoutes-y des joueurs dans l&apos;administration.</p>
       )}
@@ -581,5 +590,87 @@ function GroupSection({ group, data, now, h, showHead }: { group: PlanningGroup;
         </details>
       )}
     </section>
+  );
+}
+
+/* ---------- Disponibilités habituelles ---------- */
+
+// Lundi d'abord ; l'index est celui de Date.getDay() (0 = dimanche).
+const WEEK = [
+  { i: 1, name: "Lundi" },
+  { i: 2, name: "Mardi" },
+  { i: 3, name: "Mercredi" },
+  { i: 4, name: "Jeudi" },
+  { i: 5, name: "Vendredi" },
+  { i: 6, name: "Samedi" },
+  { i: 0, name: "Dimanche" },
+];
+
+function WeeklyCard({ weekly, busy, onSave }: { weekly: (PollAnswer | null)[]; busy: boolean; onSave: (w: (PollAnswer | null)[]) => Promise<boolean> }) {
+  const [draft, setDraft] = useState(weekly);
+  const [open, setOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const set = weekly.filter(Boolean).length;
+  const changed = draft.join() !== weekly.join();
+  const summary =
+    set === 0
+      ? "Pas encore renseignées"
+      : WEEK.filter((d) => weekly[d.i])
+          .map((d) => `${d.name.slice(0, 3)}. ${weekly[d.i] === "yes" ? "✓" : weekly[d.i] === "maybe" ? "?" : "✗"}`)
+          .join(" · ");
+
+  return (
+    <details className="card pl-weekly" open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary>
+        <span className="stack-xs">
+          <strong>🗓️ Mes disponibilités habituelles</strong>
+          <span className="muted small">{summary}</span>
+        </span>
+      </summary>
+      <div className="stack">
+        <p className="muted small">
+          Indique tes habitudes : tes réponses aux sondages sont pré-remplies pour ces jours-là (tu peux toujours les changer une par une). Ton MJ voit
+          ainsi tes disponibilités sans attendre que tu passes.
+        </p>
+        <ul className="pl-weekly-grid">
+          {WEEK.map((d) => (
+            <li key={d.i}>
+              <span className="pl-weekly-day">{d.name}</span>
+              <div className="pl-answers" role="group" aria-label={`Habitude du ${d.name.toLowerCase()}`}>
+                {(["yes", "maybe", "no"] as const).map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    className={`pl-answer ${a}`}
+                    aria-pressed={draft[d.i] === a}
+                    onClick={() => (setDraft(draft.map((v, j) => (j === d.i ? (v === a ? null : a) : v))), setSaved(false))}
+                  >
+                    {ANSWER_LABELS[a]}
+                  </button>
+                ))}
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="pl-actions">
+          <button
+            type="button"
+            className="btn btn-small"
+            disabled={busy || !changed}
+            onClick={async () => {
+              if (await onSave(draft)) setSaved(true);
+            }}
+          >
+            Enregistrer
+          </button>
+          {changed && (
+            <button type="button" className="btn btn-ghost btn-small" onClick={() => setDraft(weekly)}>
+              Annuler
+            </button>
+          )}
+          {saved && !changed && <span className="muted small">✓ Enregistré, sondages ouverts mis à jour.</span>}
+        </div>
+      </div>
+    </details>
   );
 }

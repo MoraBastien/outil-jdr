@@ -130,8 +130,15 @@ export type CharacterRecord = {
   state: CharacterState;
   /** Niveau autorisé par le MJ : si > state.level, le joueur peut monter de niveau. */
   grantedLevel: number;
+  /** Choix du prochain niveau préparés à l'avance (seulement s'ils visent bien le niveau suivant). */
+  prepared?: PreparedPlan | null;
+  /** Ce qu'il reste à reporter dans Foundry après la dernière montée de niveau. */
+  foundryTodo?: { level: number; items: { text: string; done: boolean }[] } | null;
   updatedAt: string;
 };
+
+export type HpMode = "average" | "roll";
+export type PreparedPlan = { level: number; answers: Answers; hpMode: HpMode; at: string };
 
 /** Champs que le joueur peut modifier librement (le reste passe par la création / la montée de niveau). */
 export const FREE_FIELDS = [

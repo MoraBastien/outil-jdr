@@ -6,31 +6,44 @@ import { createPortal } from "react-dom";
 import { getClass } from "../data/classes";
 import { getFeat } from "../data/feats";
 import { FEAT_SKILLED_KEY, applyLevelUp, averageHp, derive, fmtMod, nextLevelFeatures } from "../rules";
-import type { Answers, CharacterState, Choice } from "../types";
+import type { Answers, CharacterState, Choice, HpMode } from "../types";
 import { ChoicePicker, isComplete } from "./ChoicePicker";
 import Hint from "./Hint";
 
-type Result = { hpDie: number; rolled: boolean; summary: string[] };
+type Result = { hpDie: number; rolled: boolean; summary: string[]; foundry?: string[] };
 
+/**
+ * mode « levelup » : la vraie montée de niveau (accordée par le MJ, ou libre dans le coffre).
+ * mode « prepare » : le joueur prépare ses choix à l'avance ; rien ne change sur sa fiche.
+ * `initial` : choix déjà préparés, l'assistant s'ouvre directement sur le récapitulatif.
+ */
 export default function LevelUpWizard({
   state: initialState,
   busy,
+  mode = "levelup",
+  initial,
   onConfirm,
+  onPrepare,
   onClose,
 }: {
   state: CharacterState;
   busy: boolean;
-  onConfirm: (answers: Answers, hpMode: "average" | "roll") => Promise<Result | null>;
+  mode?: "levelup" | "prepare";
+  initial?: { answers: Answers; hpMode: HpMode } | null;
+  onConfirm?: (answers: Answers, hpMode: HpMode) => Promise<Result | null>;
+  onPrepare?: (answers: Answers, hpMode: HpMode) => Promise<boolean>;
   onClose: () => void;
 }) {
+  const preparing = mode === "prepare";
   // Fiche figée à l'ouverture : après validation, le parent reçoit déjà la fiche au nouveau niveau.
   const [state] = useState(initialState);
   const cls = getClass(state.classId)!;
   const { level, features, choices } = nextLevelFeatures(state);
   const before = useMemo(() => derive(state), [state]);
-  const [answers, setAnswers] = useState<Answers>({});
-  const [hpMode, setHpMode] = useState<"average" | "roll">("average");
+  const [answers, setAnswers] = useState<Answers>(initial?.answers ?? {});
+  const [hpMode, setHpMode] = useState<HpMode>(initial?.hpMode ?? "average");
   const [result, setResult] = useState<Result | null>(null);
+  const [saved, setSaved] = useState(false);
   const avg = averageHp(cls.hitDie);
 
   // Le don Doué (niveau 4) demande 3 compétences en plus.
@@ -40,8 +53,9 @@ export default function LevelUpWizard({
       : [];
   const allChoices = [...choices, ...extraChoices];
   const steps = ["intro", "hp", ...(allChoices.length ? ["choices"] : []), "recap"] as const;
-  const [stepIndex, setStepIndex] = useState(0);
-  const step = result ? "done" : steps[stepIndex];
+  // Choix préparés : on va droit au récapitulatif (on peut toujours revenir en arrière).
+  const [stepIndex, setStepIndex] = useState(() => (initial && !preparing ? steps.length - 1 : 0));
+  const step = result ? "done" : saved ? "saved" : steps[stepIndex];
 
   // Aperçu avec la moyenne (le vrai jet est fait par le serveur).
   const preview = useMemo(() => {
@@ -68,7 +82,7 @@ export default function LevelUpWizard({
   return createPortal(
     <div className="lu-overlay" role="dialog" aria-modal="true" aria-labelledby="lu-title">
       <div className="lu-modal">
-        {step !== "done" && (
+        {step !== "done" && step !== "saved" && (
           <button type="button" className="lu-close" onClick={onClose} aria-label="Fermer" disabled={busy}>
             ×
           </button>
@@ -79,11 +93,15 @@ export default function LevelUpWizard({
             <div className="lu-badge" aria-hidden="true">
               <span>{level}</span>
             </div>
-            <p className="eyebrow">Montée de niveau</p>
+            <p className="eyebrow">{preparing ? "Préparer le prochain niveau" : "Montée de niveau"}</p>
             <h2 className="title" id="lu-title">
-              {state.name} passe au niveau {level} !
+              {preparing ? `Prépare le niveau ${level} de ${state.name}` : `${state.name} passe au niveau ${level} !`}
             </h2>
-            <p className="muted">Voici ce que ton {cls.name.toLowerCase()} apprend. Prends le temps de lire : on t&apos;explique tout.</p>
+            <p className="muted">
+              {preparing
+                ? `Ton MJ ne t'a pas encore accordé ce niveau, mais tu peux faire tes choix dès maintenant. Le jour venu, il suffira de valider.`
+                : `Voici ce que ton ${cls.name.toLowerCase()} apprend. Prends le temps de lire : on t'explique tout.`}
+            </p>
             <ul className="lu-features">
               {features.map((f) => (
                 <li key={f.name}>
@@ -153,6 +171,7 @@ export default function LevelUpWizard({
             <h2 className="title" id="lu-title">
               Récapitulatif
             </h2>
+            {initial && !preparing && <p className="lu-prepared">✓ Tes choix préparés sont repris. « Retour » pour les modifier.</p>}
             {preview?.error ? (
               <p className="flash flash-error">{preview.error}</p>
             ) : (
@@ -209,13 +228,36 @@ export default function LevelUpWizard({
                 <li key={l}>{l}</li>
               ))}
             </ul>
+            {result.foundry && result.foundry.length > 0 && (
+              <p className="lu-foundry-note">
+                🧭 <b>{result.foundry.length} choses à reporter dans Foundry</b> : la liste t&apos;attend en haut de ta fiche, à cocher au fur et à mesure.
+              </p>
+            )}
             <button type="button" className="btn" onClick={onClose} autoFocus>
               Voir ma fiche
             </button>
           </div>
         )}
 
-        {step !== "done" && (
+        {step === "saved" && (
+          <div className="lu-step lu-done">
+            <div className="lu-badge" aria-hidden="true">
+              <span>✓</span>
+            </div>
+            <h2 className="title" id="lu-title">
+              Choix enregistrés
+            </h2>
+            <p className="muted">
+              Quand ton MJ t&apos;accordera le niveau {level}, le bouton « Monter de niveau » s&apos;allumera : un clic pour valider, et c&apos;est fait. Tu peux
+              modifier tes choix d&apos;ici là.
+            </p>
+            <button type="button" className="btn" onClick={onClose} autoFocus>
+              Revenir à ma fiche
+            </button>
+          </div>
+        )}
+
+        {step !== "done" && step !== "saved" && (
           <footer className="lu-foot">
             <span className="lu-progress" aria-hidden="true">
               {steps.map((s, i) => (
@@ -228,13 +270,24 @@ export default function LevelUpWizard({
                   ← Retour
                 </button>
               )}
-              {step === "recap" ? (
+              {step === "recap" && preparing ? (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy || Boolean(preview?.error)}
+                  onClick={async () => {
+                    if (await onPrepare?.(answers, hpMode)) setSaved(true);
+                  }}
+                >
+                  {busy ? "Enregistrement…" : "Enregistrer mes choix"}
+                </button>
+              ) : step === "recap" ? (
                 <button
                   type="button"
                   className="btn levelup-btn"
                   disabled={busy || Boolean(preview?.error)}
                   onClick={async () => {
-                    const r = await onConfirm(answers, hpMode);
+                    const r = await onConfirm?.(answers, hpMode);
                     if (r) setResult(r);
                   }}
                 >

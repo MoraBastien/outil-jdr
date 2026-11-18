@@ -5,8 +5,10 @@
 
 import { randomInt } from "crypto";
 import { requireUser, canUseTool } from "@/lib/auth";
-import { getVault, randomUUID, updateDb, type StoredCharacter, type User } from "@/lib/db";
+import { getCharacters, getGroups, getProposals, getVault, randomUUID, updateDb, type StoredCharacter, type User } from "@/lib/db";
+import { userGroupIds, visibleGroups } from "@/lib/groups";
 import { getClass } from "@/tools/character/data/classes";
+import { toCampaignState } from "@/tools/character/proposal";
 import { RuleError, applyLevelUp, averageHp, buildCharacter, sanitizeFree, type CreationInput } from "@/tools/character/rules";
 import { MAX_LEVEL, type Answers, type CharacterRecord, type CharacterState } from "@/tools/character/types";
 import { VAULT_TOOL_ID } from "./meta";
@@ -14,7 +16,16 @@ import { VAULT_TOOL_ID } from "./meta";
 const MAX_DRAFTS = 30;
 
 export type VaultEntry = { record: CharacterRecord; levels: number[] };
-export type VaultResult = { ok: true; entries: VaultEntry[]; levelUp?: { hpDie: number; rolled: boolean; summary: string[] } } | { ok: false; error: string };
+/** Groupes du joueur, pour proposer un essai au MJ. */
+export type VaultGroup = {
+  id: string;
+  name: string;
+  /** Le joueur a déjà un personnage vivant dans ce groupe : pas de proposition possible. */
+  hasCharacter: boolean;
+  proposal: { draftId: string; name: string; status: "pending" | "refused"; reason: string } | null;
+};
+export type VaultData = { entries: VaultEntry[]; groups: VaultGroup[] };
+export type VaultResult = ({ ok: true; levelUp?: { hpDie: number; rolled: boolean; summary: string[] } } & VaultData) | { ok: false; error: string };
 
 async function requireToolUser(): Promise<User> {
   const user = await requireUser();
@@ -28,13 +39,26 @@ const toEntry = (c: StoredCharacter, user: User): VaultEntry => ({
   levels: (c.snapshots ?? []).map((s) => s.level),
 });
 
-async function entries(user: User): Promise<VaultEntry[]> {
-  return (await getVault(user.id)).map((c) => toEntry(c, user));
+async function data(user: User): Promise<VaultData> {
+  const [vault, allGroups, chars, proposals] = await Promise.all([getVault(user.id), getGroups(), getCharacters(), getProposals()]);
+  const groups = user.role === "admin" ? [] : visibleGroups(user, allGroups);
+  return {
+    entries: vault.map((c) => toEntry(c, user)),
+    groups: groups.map((g) => {
+      const p = proposals.find((x) => x.ownerId === user.id && x.groupId === g.id);
+      return {
+        id: g.id,
+        name: g.name,
+        hasCharacter: chars.some((c) => c.ownerId === user.id && c.groupId === g.id && !c.deadAt),
+        proposal: p ? { draftId: p.draftId, name: (p.state as CharacterState).name, status: p.status, reason: p.reason ?? "" } : null,
+      };
+    }),
+  };
 }
 
 async function guard(user: User, fn: () => Promise<VaultResult | void>): Promise<VaultResult> {
   try {
-    return (await fn()) ?? { ok: true, entries: await entries(user) };
+    return (await fn()) ?? { ok: true, ...(await data(user)) };
   } catch (e) {
     if (e instanceof RuleError) return { ok: false, error: e.message };
     console.error("Coffre :", e);
@@ -49,8 +73,8 @@ function mine(list: StoredCharacter[] | undefined, user: User, id: string): Stor
   return c;
 }
 
-export async function getVaultAction(): Promise<VaultEntry[]> {
-  return entries(await requireToolUser());
+export async function getVaultAction(): Promise<VaultData> {
+  return data(await requireToolUser());
 }
 
 export async function createDraftAction(input: CreationInput): Promise<VaultResult> {
@@ -98,7 +122,7 @@ export async function levelUpDraftAction(id: string, answers: Answers, hpMode: "
       c.updatedAt = now;
       levelUp = { hpDie, rolled, summary: r.summary };
     });
-    return { ok: true, entries: await entries(user), levelUp };
+    return { ok: true, ...(await data(user)), levelUp };
   });
 }
 
@@ -160,6 +184,43 @@ export async function deleteDraftAction(id: string): Promise<VaultResult> {
     await updateDb((db) => {
       mine(db.vault, user, id);
       db.vault = (db.vault ?? []).filter((c) => c.id !== id);
+    });
+  });
+}
+
+/* ---------- Proposer un essai au MJ ---------- */
+
+/**
+ * Propose un essai pour devenir le personnage du joueur dans un groupe (après une mort, ou pour un nouveau venu).
+ * Règles de campagne : pas de valeurs libres, PV recalculés à la moyenne. Une seule proposition par groupe.
+ */
+export async function proposeDraftAction(draftId: string, groupId: string, message: string): Promise<VaultResult> {
+  const user = await requireToolUser();
+  return guard(user, async () => {
+    if (user.role !== "player") throw new RuleError("Seuls les joueurs proposent des personnages.");
+    await updateDb((db) => {
+      const draft = mine(db.vault, user, draftId);
+      const group = (db.groups ?? []).find((g) => g.id === groupId);
+      const me = db.users.find((u) => u.id === user.id);
+      if (!group || !me || !userGroupIds(me).includes(groupId)) throw new RuleError("Tu ne fais pas partie de ce groupe.");
+      if ((db.characters ?? []).some((c) => c.ownerId === user.id && c.groupId === groupId && !c.deadAt)) {
+        throw new RuleError("Tu as déjà un personnage dans ce groupe.");
+      }
+      const state = toCampaignState(draft.state as CharacterState);
+      const now = new Date().toISOString();
+      const list = (db.proposals ?? []).filter((p) => !(p.ownerId === user.id && p.groupId === groupId));
+      list.push({ id: randomUUID(), ownerId: user.id, groupId, draftId, state, message: String(message ?? "").trim().slice(0, 1000), status: "pending", createdAt: now, updatedAt: now });
+      db.proposals = list;
+    });
+  });
+}
+
+/** Retire sa proposition (ou efface un refus) pour un groupe. */
+export async function withdrawProposalAction(groupId: string): Promise<VaultResult> {
+  const user = await requireToolUser();
+  return guard(user, async () => {
+    await updateDb((db) => {
+      db.proposals = (db.proposals ?? []).filter((p) => !(p.ownerId === user.id && p.groupId === groupId));
     });
   });
 }

@@ -1,15 +1,15 @@
 // Widget du tableau de bord : les personnages du joueur (un par groupe) et le bouton « Monter de niveau ».
 // MJ : les fiches de chaque groupe et les montées de niveau en attente.
 import Link from "next/link";
-import { getCharacters, getGroups, getUsers, type StoredCharacter, type User } from "@/lib/db";
+import { getCharacters, getGroups, getProposals, getUsers, type StoredCharacter, type User } from "@/lib/db";
 import { membersOf, visibleGroups } from "@/lib/groups";
 import { derive, fmtMod, shortLabel } from "./rules";
-import { CHARACTER_TOOL_ID, type CharacterState } from "./types";
+import { CHARACTER_TOOL_ID, MAX_LEVEL, type CharacterState } from "./types";
 
 const HREF = `/outils/${CHARACTER_TOOL_ID}`;
 
 export default async function CharacterWidget({ user }: { user: User }) {
-  const [chars, users, allGroups] = await Promise.all([getCharacters(), getUsers(), getGroups()]);
+  const [chars, users, allGroups, proposals] = await Promise.all([getCharacters(), getUsers(), getGroups(), getProposals()]);
   const groups = visibleGroups(user, allGroups);
 
   if (user.role === "admin") {
@@ -28,14 +28,23 @@ export default async function CharacterWidget({ user }: { user: User }) {
                   {members.map((p) => {
                     const c = chars.find((x) => x.ownerId === p.id && x.groupId === g.id && !x.deadAt);
                     const s = c?.state as CharacterState | undefined;
+                    const proposal = !c && proposals.find((x) => x.ownerId === p.id && x.groupId === g.id && x.status === "pending");
                     return (
                       <li key={p.id}>
                         <Link href={HREF} className="pw-poll">
                           <span className="stack-xs">
                             <strong>{s?.name ?? p.name}</strong>
-                            <span className="muted small">{s ? `${p.name} · ${shortLabel(s)}` : "Pas encore de fiche"}</span>
+                            <span className="muted small">
+                              {s ? `${p.name} · ${shortLabel(s)}` : proposal ? `Propose ${(proposal.state as CharacterState).name}` : "Pas encore de fiche"}
+                            </span>
                           </span>
-                          {c && s && c.grantedLevel > s.level ? <span className="chip chip-accent">Montée en attente</span> : s && <span className="chip">Niv. {s.level}</span>}
+                          {proposal ? (
+                            <span className="chip chip-accent">🗝️ À examiner</span>
+                          ) : c && s && c.grantedLevel > s.level ? (
+                            <span className="chip chip-accent">Montée en attente</span>
+                          ) : (
+                            s && <span className="chip">Niv. {s.level}</span>
+                          )}
                         </Link>
                       </li>
                     );
@@ -59,6 +68,8 @@ export default async function CharacterWidget({ user }: { user: User }) {
             {multi && <span className="label">👥 {g.name}</span>}
             {c ? (
               <CharacterLine c={c} groupId={g.id} />
+            ) : proposals.some((x) => x.ownerId === user.id && x.groupId === g.id && x.status === "pending") ? (
+              <p className="muted small">🗝️ Ton personnage proposé depuis le coffre attend la réponse de ton MJ.</p>
             ) : (
               <div className="cs-widget-empty">
                 <p className="muted">
@@ -80,6 +91,8 @@ function CharacterLine({ c, groupId }: { c: StoredCharacter; groupId: string }) 
   const s = c.state as CharacterState;
   const d = derive(s);
   const canLevelUp = c.grantedLevel > s.level;
+  const ready = c.prepared?.level === s.level + 1;
+  const todo = c.foundryTodo?.items.filter((i) => !i.done).length ?? 0;
   const hpRatio = d.hpMax ? s.play.hp / d.hpMax : 0;
   return (
     <div className="cs-widget">
@@ -123,7 +136,17 @@ function CharacterLine({ c, groupId }: { c: StoredCharacter; groupId: string }) 
 
       {canLevelUp && (
         <Link href={`${HREF}?groupe=${groupId}&levelup=${c.id}`} className="btn levelup-btn cs-widget-levelup">
-          ✦ Monter de niveau
+          ✦ Monter de niveau{ready && " · choix prêts"}
+        </Link>
+      )}
+      {!canLevelUp && todo > 0 && (
+        <Link href={`${HREF}?groupe=${groupId}`} className="cs-widget-hint">
+          🧭 {todo} chose{todo > 1 ? "s" : ""} à reporter dans Foundry
+        </Link>
+      )}
+      {!canLevelUp && todo === 0 && s.level < MAX_LEVEL && (
+        <Link href={`${HREF}?groupe=${groupId}`} className="cs-widget-hint">
+          {ready ? `✓ Choix du niveau ${s.level + 1} prêts` : `Préparer le niveau ${s.level + 1}`}
         </Link>
       )}
     </div>

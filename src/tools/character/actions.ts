@@ -5,28 +5,39 @@
 
 import { randomInt } from "crypto";
 import { requireUser, canUseTool } from "@/lib/auth";
-import { getCharacters, getGraves, getGroups, getUsers, randomUUID, updateDb, type Db, type Grave, type StoredCharacter, type User } from "@/lib/db";
+import { getCharacters, getGraves, getGroups, getProposals, getUsers, randomUUID, updateDb, type Db, type Grave, type StoredCharacter, type User } from "@/lib/db";
 import { membersOf, userGroupIds, visibleGroups } from "@/lib/groups";
 import { getClass } from "./data/classes";
+import { foundryChecklist } from "./foundry";
 import { RuleError, applyLevelUp, averageHp, buildCharacter, sanitizeFree, shortLabel, type CreationInput } from "./rules";
-import { CHARACTER_TOOL_ID, MAX_LEVEL, type Answers, type CharacterRecord, type CharacterState } from "./types";
+import { CHARACTER_TOOL_ID, MAX_LEVEL, type Answers, type CharacterRecord, type CharacterState, type HpMode } from "./types";
 
 type Snapshot = { level: number; at: string; state: CharacterState };
 export type Death = { epitaph: string; diedAt: string };
 export type AdminEntry = { record: CharacterRecord; snapshots: Snapshot[]; dead?: Death };
+/** Joueur : sa proposition (venue du coffre) pour ce groupe. */
+export type MyProposal = { name: string; label: string; status: "pending" | "refused"; reason: string };
+/** MJ : proposition en attente d'un membre sans personnage. */
+export type PendingProposal = { id: string; state: CharacterState; message: string; createdAt: string };
+export type LevelUpOutcome = { hpDie: number; rolled: boolean; summary: string[]; foundry: string[] };
 
 export type CharacterView = {
   isAdmin: boolean;
   meId: string;
   /** Joueur : une entrée par groupe dont il est membre, avec sa fiche (ou null). */
-  mine: { group: { id: string; name: string }; record: CharacterRecord | null; fallen: { name: string; epitaph: string; diedAt: string }[] }[];
-  /** MJ : chaque groupe, ses membres et leur fiche dans ce groupe. */
-  groups: { id: string; name: string; members: { id: string; name: string; entry: AdminEntry | null }[] }[];
+  mine: {
+    group: { id: string; name: string };
+    record: CharacterRecord | null;
+    fallen: { name: string; epitaph: string; diedAt: string }[];
+    proposal: MyProposal | null;
+  }[];
+  /** MJ : chaque groupe, ses membres et leur fiche dans ce groupe (ou leur proposition en attente). */
+  groups: { id: string; name: string; members: { id: string; name: string; entry: AdminEntry | null; proposal: PendingProposal | null }[] }[];
   /** MJ : fiches hors groupe (groupe supprimé, joueur retiré du groupe, anciennes fiches). */
   archived: (AdminEntry & { groupName: string | null })[];
 };
 
-export type ActionResult = { ok: true; view: CharacterView; levelUp?: { hpDie: number; rolled: boolean; summary: string[] } } | { ok: false; error: string };
+export type ActionResult = { ok: true; view: CharacterView; levelUp?: LevelUpOutcome } | { ok: false; error: string };
 
 async function requireToolUser(): Promise<User> {
   const user = await requireUser();
@@ -34,15 +45,21 @@ async function requireToolUser(): Promise<User> {
   return user;
 }
 
-const toRecord = (c: StoredCharacter, users: User[]): CharacterRecord => ({
-  id: c.id,
-  ownerId: c.ownerId,
-  groupId: c.groupId ?? null,
-  ownerName: users.find((u) => u.id === c.ownerId)?.name ?? "?",
-  state: c.state as CharacterState,
-  grantedLevel: c.grantedLevel,
-  updatedAt: c.updatedAt,
-});
+const toRecord = (c: StoredCharacter, users: User[]): CharacterRecord => {
+  const state = c.state as CharacterState;
+  return {
+    id: c.id,
+    ownerId: c.ownerId,
+    groupId: c.groupId ?? null,
+    ownerName: users.find((u) => u.id === c.ownerId)?.name ?? "?",
+    state,
+    grantedLevel: c.grantedLevel,
+    // Des choix préparés pour un autre niveau ne servent plus à rien.
+    prepared: c.prepared && c.prepared.level === state.level + 1 ? c.prepared : null,
+    foundryTodo: c.foundryTodo ?? null,
+    updatedAt: c.updatedAt,
+  };
+};
 const toEntry = (c: StoredCharacter, users: User[], graves: Grave[]): AdminEntry => {
   const grave = graves.find((g) => g.characterId === c.id);
   return {
@@ -53,7 +70,7 @@ const toEntry = (c: StoredCharacter, users: User[], graves: Grave[]): AdminEntry
 };
 
 async function view(user: User): Promise<CharacterView> {
-  const [chars, users, allGroups, graves] = await Promise.all([getCharacters(), getUsers(), getGroups(), getGraves()]);
+  const [chars, users, allGroups, graves, proposals] = await Promise.all([getCharacters(), getUsers(), getGroups(), getGraves(), getProposals()]);
   const isAdmin = user.role === "admin";
   const groups = visibleGroups(user, allGroups);
   // La fiche « en jeu » d'un joueur dans un groupe : la seule qui n'est pas morte.
@@ -68,7 +85,11 @@ async function view(user: User): Promise<CharacterView> {
         const fallen = graves
           .filter((gr) => gr.groupId === g.id && gr.ownerId === user.id)
           .map((gr) => ({ name: gr.name, epitaph: gr.epitaph, diedAt: gr.diedAt }));
-        return { group: { id: g.id, name: g.name }, record: c ? toRecord(c, users) : null, fallen };
+        const p = c ? undefined : proposals.find((x) => x.ownerId === user.id && x.groupId === g.id);
+        const proposal: MyProposal | null = p
+          ? { name: (p.state as CharacterState).name, label: shortLabel(p.state as CharacterState), status: p.status, reason: p.reason ?? "" }
+          : null;
+        return { group: { id: g.id, name: g.name }, record: c ? toRecord(c, users) : null, fallen, proposal };
       }),
       groups: [],
       archived: [],
@@ -82,7 +103,9 @@ async function view(user: User): Promise<CharacterView> {
     members: membersOf(users, g.id).map((m) => {
       const c = find(m.id, g.id);
       if (c) placed.add(c.id);
-      return { id: m.id, name: m.name, entry: c ? toEntry(c, users, graves) : null };
+      const p = c ? undefined : proposals.find((x) => x.ownerId === m.id && x.groupId === g.id && x.status === "pending");
+      const proposal: PendingProposal | null = p ? { id: p.id, state: p.state as CharacterState, message: p.message, createdAt: p.createdAt } : null;
+      return { id: m.id, name: m.name, entry: c ? toEntry(c, users, graves) : null, proposal };
     }),
   }));
   const groupName = new Map(allGroups.map((g) => [g.id, g.name]));
@@ -137,6 +160,8 @@ export async function createCharacterAction(input: CreationInput, groupId: strin
       if (list.some((c) => c.ownerId === owner && c.groupId === groupId && !c.deadAt)) throw new RuleError("Ce joueur a déjà une fiche dans ce groupe.");
       const now = new Date().toISOString();
       list.push({ id: randomUUID(), ownerId: owner, groupId, state, grantedLevel: 1, snapshots: [{ level: 1, at: now, state }], createdAt: now, updatedAt: now });
+      // Une proposition venue du coffre pour ce groupe n'a plus lieu d'être.
+      db.proposals = (db.proposals ?? []).filter((p) => !(p.ownerId === owner && p.groupId === groupId));
     });
   });
 }
@@ -152,10 +177,10 @@ export async function saveCharacterAction(characterId: string, patch: Partial<Ch
   });
 }
 
-export async function levelUpAction(characterId: string, answers: Answers, hpMode: "average" | "roll"): Promise<ActionResult> {
+export async function levelUpAction(characterId: string, answers: Answers, hpMode: HpMode): Promise<ActionResult> {
   const user = await requireToolUser();
   return guard(user, async () => {
-    let result: { hpDie: number; rolled: boolean; summary: string[] } | undefined;
+    let result: LevelUpOutcome | undefined;
     await updateDb((db) => {
       const c = editable(db, user, characterId);
       const state = c.state as CharacterState;
@@ -163,12 +188,15 @@ export async function levelUpAction(characterId: string, answers: Answers, hpMod
       const hitDie = getClass(state.classId)?.hitDie ?? 8;
       const rolled = hpMode === "roll";
       const hpDie = rolled ? randomInt(1, hitDie + 1) : averageHp(hitDie);
-      const r = applyLevelUp(state, answers ?? {}, hpDie);
+      const r = applyLevelUp(state, cleanAnswers(answers), hpDie);
       const now = new Date().toISOString();
+      const foundry = foundryChecklist(state, r, { die: hpDie, rolled });
       c.state = r.state;
       c.snapshots = [...(c.snapshots ?? []), { level: r.state.level, at: now, state: r.state }];
+      c.prepared = undefined;
+      c.foundryTodo = { level: r.state.level, items: foundry.map((text) => ({ text, done: false })) };
       c.updatedAt = now;
-      result = { hpDie, rolled, summary: r.summary };
+      result = { hpDie, rolled, summary: r.summary, foundry };
     });
     return { ok: true, view: await view(user), levelUp: result };
   });
@@ -184,6 +212,106 @@ export async function grantLevelAction(characterId: string, level: number): Prom
       const current = (c.state as CharacterState).level;
       c.grantedLevel = Math.min(MAX_LEVEL, Math.max(current, Math.round(level)));
       c.updatedAt = new Date().toISOString();
+    });
+  });
+}
+
+/* ---------- Préparer sa montée de niveau à l'avance ---------- */
+
+/** Nettoie des réponses envoyées par le navigateur (le moteur de règles vérifie ensuite leur validité). */
+function cleanAnswers(answers: unknown): Answers {
+  const out: Answers = {};
+  if (!answers || typeof answers !== "object") return out;
+  for (const [k, v] of Object.entries(answers as Record<string, unknown>).slice(0, 20)) {
+    if (Array.isArray(v)) out[String(k).slice(0, 60)] = v.slice(0, 10).map((x) => String(x).slice(0, 60));
+  }
+  return out;
+}
+
+/** Le joueur enregistre ses choix du niveau suivant, avant que le MJ ne l'accorde. Ils sont vérifiés tout de suite. */
+export async function prepareLevelUpAction(characterId: string, answers: Answers, hpMode: HpMode): Promise<ActionResult> {
+  const user = await requireToolUser();
+  return guard(user, async () => {
+    await updateDb((db) => {
+      const c = editable(db, user, characterId);
+      const state = c.state as CharacterState;
+      if (state.level >= MAX_LEVEL) throw new RuleError(`Le niveau maximum est ${MAX_LEVEL}.`);
+      const clean = cleanAnswers(answers);
+      // Vérification avec la moyenne : lève une RuleError si un choix manque ou est invalide.
+      applyLevelUp(state, clean, averageHp(getClass(state.classId)?.hitDie ?? 8));
+      const now = new Date().toISOString();
+      c.prepared = { level: state.level + 1, answers: clean, hpMode: hpMode === "roll" ? "roll" : "average", at: now };
+      c.updatedAt = now;
+    });
+  });
+}
+
+export async function clearPreparedAction(characterId: string): Promise<ActionResult> {
+  const user = await requireToolUser();
+  return guard(user, async () => {
+    await updateDb((db) => {
+      const c = editable(db, user, characterId);
+      c.prepared = undefined;
+    });
+  });
+}
+
+/** Coche / décoche les étapes « À reporter dans Foundry ». `null` : la liste est terminée, on la retire. */
+export async function foundryTodoAction(characterId: string, done: boolean[] | null): Promise<ActionResult> {
+  const user = await requireToolUser();
+  return guard(user, async () => {
+    await updateDb((db) => {
+      const c = editable(db, user, characterId);
+      if (!c.foundryTodo) return;
+      if (done === null) c.foundryTodo = undefined;
+      else c.foundryTodo.items = c.foundryTodo.items.map((it, i) => ({ ...it, done: Boolean(done[i]) }));
+    });
+  });
+}
+
+/* ---------- Propositions venues du coffre ---------- */
+
+/** MJ : accepte la proposition d'un joueur. L'essai devient sa fiche dans le groupe, au niveau proposé. */
+export async function acceptProposalAction(proposalId: string): Promise<ActionResult> {
+  const user = await requireToolUser();
+  return guard(user, async () => {
+    if (user.role !== "admin") throw new RuleError("Réservé au MJ.");
+    await updateDb((db) => {
+      const p = (db.proposals ?? []).find((x) => x.id === proposalId && x.status === "pending");
+      if (!p) throw new RuleError("Proposition introuvable.");
+      const owner = db.users.find((u) => u.id === p.ownerId && u.role === "player");
+      if (!owner || !userGroupIds(owner).includes(p.groupId)) throw new RuleError("Ce joueur ne fait plus partie de ce groupe.");
+      const list = (db.characters ??= []);
+      if (list.some((c) => c.ownerId === p.ownerId && c.groupId === p.groupId && !c.deadAt)) throw new RuleError("Ce joueur a déjà une fiche dans ce groupe.");
+      const state = p.state as CharacterState;
+      const now = new Date().toISOString();
+      const c: StoredCharacter = {
+        id: randomUUID(),
+        ownerId: p.ownerId,
+        groupId: p.groupId,
+        state,
+        grantedLevel: state.level,
+        snapshots: [{ level: state.level, at: now, state }],
+        createdAt: now,
+        updatedAt: now,
+      };
+      list.push(c);
+      db.proposals = (db.proposals ?? []).filter((x) => x.id !== p.id);
+    });
+  });
+}
+
+/** MJ : refuse une proposition, avec un mot d'explication pour le joueur. */
+export async function refuseProposalAction(proposalId: string, reason: string): Promise<ActionResult> {
+  const user = await requireToolUser();
+  return guard(user, async () => {
+    if (user.role !== "admin") throw new RuleError("Réservé au MJ.");
+    await updateDb((db) => {
+      const p = (db.proposals ?? []).find((x) => x.id === proposalId && x.status === "pending");
+      if (!p) throw new RuleError("Proposition introuvable.");
+      p.status = "refused";
+      p.reason = String(reason ?? "").trim().slice(0, 500);
+      p.updatedAt = new Date().toISOString();
     });
   });
 }

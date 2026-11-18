@@ -4,9 +4,16 @@
 
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import type { ToolPlayer } from "../registry";
+import Link from "next/link";
+import { withdrawProposalAction } from "../vault/actions";
 import {
+  acceptProposalAction,
+  clearPreparedAction,
   createCharacterAction,
   declareDeathAction,
+  foundryTodoAction,
+  prepareLevelUpAction,
+  refuseProposalAction,
   deleteCharacterAction,
   getCharacterViewAction,
   grantLevelAction,
@@ -15,6 +22,8 @@ import {
   type ActionResult,
   type AdminEntry,
   type CharacterView,
+  type MyProposal,
+  type PendingProposal,
 } from "./actions";
 import CreationWizard from "./components/CreationWizard";
 import LevelUpWizard from "./components/LevelUpWizard";
@@ -24,19 +33,30 @@ import { MAX_LEVEL, type Answers, type CharacterRecord } from "./types";
 
 type Run = (p: Promise<ActionResult>) => Promise<ActionResult | null>;
 
+/** Retire une proposition depuis la fiche : action du coffre, puis on recharge la vue des fiches. */
+async function withdrawFromCharacter(groupId: string): Promise<ActionResult> {
+  const r = await withdrawProposalAction(groupId);
+  if (!r.ok) return r;
+  return { ok: true, view: await getCharacterViewAction() };
+}
+
 export default function CharacterTool({ player }: { player: ToolPlayer }) {
   const [view, setView] = useState<CharacterView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [levelUpFor, setLevelUpFor] = useState<string | null>(null);
+  const [prepareFor, setPrepareFor] = useState<string | null>(null);
   // Lien du tableau de bord : /outils/personnage?groupe=<id>&levelup=<idFiche>
   const [initial, setInitial] = useState<{ group: string | null; levelUp: string | null }>({ group: null, levelUp: null });
   const [groupTab, setGroupTab] = useState<string | null>(null);
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
-    setInitial({ group: q.get("groupe"), levelUp: q.get("levelup") });
-    if (q.has("levelup") || q.has("groupe")) window.history.replaceState(null, "", window.location.pathname);
+    // Seulement si le lien en contient : un 2e passage de l'effet (mode strict) ne doit pas effacer la cible.
+    if (q.has("levelup") || q.has("groupe")) {
+      setInitial({ group: q.get("groupe"), levelUp: q.get("levelup") });
+      window.history.replaceState(null, "", window.location.pathname);
+    }
     getCharacterViewAction()
       .then(setView)
       .catch(() => setError("Impossible de charger les fiches."));
@@ -91,11 +111,16 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
     </p>
   );
 
-  /** Fiche + assistant de montée de niveau. */
+  /** Fiche + assistant de montée de niveau (et préparation du niveau suivant). */
   const sheetFor = (record: CharacterRecord) => {
     const canLevelUp = record.grantedLevel > record.state.level;
     return (
       <>
+        {/* Le MJ ne voit pas ces aides : elles concernent la fiche Foundry du joueur. */}
+        {!view.isAdmin && record.foundryTodo && <FoundryTodoCard key={`${record.id}-${record.foundryTodo.level}`} record={record} busy={busy} run={run} />}
+        {!view.isAdmin && !canLevelUp && record.state.level < MAX_LEVEL && (
+          <PrepareCard record={record} busy={busy} onOpen={() => setPrepareFor(record.id)} onClear={() => run(clearPreparedAction(record.id))} />
+        )}
         <Sheet
           key={record.id}
           record={record}
@@ -109,11 +134,22 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
           <LevelUpWizard
             state={record.state}
             busy={busy}
+            initial={record.prepared}
             onClose={() => setLevelUpFor(null)}
             onConfirm={async (answers: Answers, hpMode) => {
               const r = await run(levelUpAction(record.id, answers, hpMode));
               return r?.ok && r.levelUp ? r.levelUp : null;
             }}
+          />
+        )}
+        {prepareFor === record.id && (
+          <LevelUpWizard
+            mode="prepare"
+            state={record.state}
+            busy={busy}
+            initial={record.prepared}
+            onClose={() => setPrepareFor(null)}
+            onPrepare={async (answers: Answers, hpMode) => Boolean((await run(prepareLevelUpAction(record.id, answers, hpMode)))?.ok)}
           />
         )}
       </>
@@ -159,7 +195,11 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
                 </span>
                 <div className="stack-xs">
                   <strong>Ton MJ t&apos;a accordé le niveau {record.state.level + 1} !</strong>
-                  <span className="muted small">L&apos;assistant te guide pas à pas : nouvelles capacités, points de vie et choix.</span>
+                  <span className="muted small">
+                    {record.prepared
+                      ? "Tes choix sont déjà prêts : vérifie le récapitulatif et valide."
+                      : "L'assistant te guide pas à pas : nouvelles capacités, points de vie et choix."}
+                  </span>
                 </div>
                 <button type="button" className="btn levelup-btn" onClick={() => setLevelUpFor(record.id)}>
                   Monter de niveau
@@ -180,6 +220,7 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
                 </div>
               </div>
             )).slice(0, 1)}
+            {current.proposal && <ProposalBanner proposal={current.proposal} busy={busy} onWithdraw={() => run(withdrawFromCharacter(current.group.id))} />}
             <div className="cs-welcome">
               <p className="eyebrow">
                 Bienvenue, {player.name}
@@ -189,6 +230,13 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
                 Créons ta fiche de personnage pour Donjons &amp; Dragons (règles 2024)
                 {view.mine.length > 1 ? ` pour le groupe « ${current.group.name} »` : ""}. Chaque étape est expliquée : tu peux cliquer sur les « ? » à
                 tout moment.
+              </p>
+              <p className="muted small">
+                Tu préfères expérimenter d&apos;abord ? Prépare-le dans ton{" "}
+                <Link href="/outils/coffre" className="text-link">
+                  Coffre
+                </Link>{" "}
+                puis propose-le à ton MJ.
               </p>
             </div>
             <CreationWizard busy={busy} onCreate={async (input: CreationInput) => Boolean((await run(createCharacterAction(input, current.group.id)))?.ok)} />
@@ -201,7 +249,11 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
 
 /* ---------- Vue du MJ ---------- */
 
-type Selection = { kind: "sheet"; characterId: string } | { kind: "create"; ownerId: string; ownerName: string; groupId: string; groupName: string } | null;
+type Selection =
+  | { kind: "sheet"; characterId: string }
+  | { kind: "create"; ownerId: string; ownerName: string; groupId: string; groupName: string }
+  | { kind: "proposal"; proposalId: string }
+  | null;
 
 function AdminPanel({
   view,
@@ -227,6 +279,32 @@ function AdminPanel({
   const isArchived = Boolean(selected && view.archived.some((a) => a.record.id === selected.record.id));
   const pick = (id: string) => (setSel({ kind: "sheet", characterId: id }), setSnapshotLevel(null), setDeathOpen(false));
 
+  const proposals = view.groups.flatMap((g) => g.members.flatMap((m) => (m.proposal ? [{ ...m.proposal, ownerId: m.id, ownerName: m.name, groupId: g.id, groupName: g.name }] : [])));
+  const openProposal = sel?.kind === "proposal" ? proposals.find((p) => p.id === sel.proposalId) : undefined;
+  if (openProposal) {
+    return (
+      <div className="cs-root stack-lg">
+        {errorBox}
+        <ProposalReview
+          proposal={openProposal}
+          busy={busy}
+          onBack={() => setSel(null)}
+          onAccept={async () => {
+            const r = await run(acceptProposalAction(openProposal.id));
+            if (r?.ok) {
+              const created = r.view.groups.find((g) => g.id === openProposal.groupId)?.members.find((m) => m.id === openProposal.ownerId)?.entry;
+              setSel(created ? { kind: "sheet", characterId: created.record.id } : null);
+            }
+          }}
+          onRefuse={async (reason) => {
+            const r = await run(refuseProposalAction(openProposal.id, reason));
+            if (r?.ok) setSel(null);
+          }}
+        />
+      </div>
+    );
+  }
+
   if (sel?.kind === "create") {
     return (
       <div className="cs-root stack-lg">
@@ -249,7 +327,7 @@ function AdminPanel({
   }
 
   /** `archivedLabel` : fiche hors groupe (lecture seule, pas de montée de niveau). */
-  const rosterItem = (key: string, name: string, entry: AdminEntry | null, onCreate?: () => void, archivedLabel?: string) => {
+  const rosterItem = (key: string, name: string, entry: AdminEntry | null, onCreate?: () => void, archivedLabel?: string, proposal?: PendingProposal | null) => {
     const r = entry?.record;
     const pending = r && r.grantedLevel > r.state.level;
     const live = r && archivedLabel === undefined;
@@ -261,16 +339,22 @@ function AdminPanel({
           </span>
           <span className="stack-xs">
             <strong>{r ? r.state.name : name}</strong>
-            <span className="muted small">{r ? `${name} · ${shortLabel(r.state)}` : "Pas encore de fiche"}</span>
+            <span className="muted small">{r ? `${name} · ${shortLabel(r.state)}` : proposal ? `Propose ${proposal.state.name} (${shortLabel(proposal.state)})` : "Pas encore de fiche"}</span>
             {archivedLabel && <span className="muted small">{archivedLabel}</span>}
           </span>
         </button>
         <div className="cs-roster-actions">
+          {!r && proposal && (
+            <button type="button" className="btn btn-small" onClick={() => setSel({ kind: "proposal", proposalId: proposal.id })}>
+              🗝️ Examiner la proposition
+            </button>
+          )}
           {!r && onCreate && (
             <button type="button" className="btn btn-ghost btn-small" onClick={onCreate}>
               Créer pour {name}
             </button>
           )}
+          {live && r.prepared && <span className="chip chip-ok">Choix du niv. {r.prepared.level} prêts</span>}
           {live && pending && (
             <>
               <span className="chip chip-accent">Niveau {r.grantedLevel} accordé</span>
@@ -314,7 +398,14 @@ function AdminPanel({
           ) : (
             <ul className="cs-roster">
               {g.members.map((m) =>
-                rosterItem(`${g.id}-${m.id}`, m.name, m.entry, () => setSel({ kind: "create", ownerId: m.id, ownerName: m.name, groupId: g.id, groupName: g.name })),
+                rosterItem(
+                  `${g.id}-${m.id}`,
+                  m.name,
+                  m.entry,
+                  () => setSel({ kind: "create", ownerId: m.id, ownerName: m.name, groupId: g.id, groupName: g.name }),
+                  undefined,
+                  m.proposal,
+                ),
               )}
             </ul>
           )}
@@ -454,5 +545,183 @@ function AdminPanel({
         </section>
       )}
     </div>
+  );
+}
+
+/* ---------- Préparer le prochain niveau ---------- */
+
+function PrepareCard({ record, busy, onOpen, onClear }: { record: CharacterRecord; busy: boolean; onOpen: () => void; onClear: () => void }) {
+  const next = record.state.level + 1;
+  const ready = Boolean(record.prepared);
+  return (
+    <div className={`cs-prepare${ready ? " ready" : ""}`}>
+      <span className="cs-prepare-badge" aria-hidden="true">
+        {ready ? "✓" : next}
+      </span>
+      <div className="stack-xs">
+        <strong>{ready ? `Choix du niveau ${next} prêts` : `Prochain niveau : ${next}`}</strong>
+        <span className="muted small">
+          {ready
+            ? "Le jour où ton MJ t'accorde le niveau, il suffira de valider."
+            : "Fais tes choix dès maintenant (sous-classe, amélioration, sorts…). Ils seront appliqués d'un clic quand ton MJ t'accordera le niveau."}
+        </span>
+      </div>
+      <div className="pl-actions">
+        <button type="button" className={`btn btn-small${ready ? " btn-ghost" : ""}`} onClick={onOpen} disabled={busy}>
+          {ready ? "Modifier" : "Préparer"}
+        </button>
+        {ready && (
+          <button type="button" className="link-btn small" onClick={onClear} disabled={busy}>
+            Effacer
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- À reporter dans Foundry ---------- */
+
+function FoundryTodoCard({ record, busy, run }: { record: CharacterRecord; busy: boolean; run: Run }) {
+  const todo = record.foundryTodo!;
+  // Cases cochées tout de suite à l'écran, puis enregistrées.
+  const [done, setDone] = useState(() => todo.items.map((i) => i.done));
+  const count = done.filter(Boolean).length;
+  const all = count === todo.items.length;
+  const toggle = (i: number) => {
+    const next = done.map((d, j) => (j === i ? !d : d));
+    setDone(next);
+    void run(foundryTodoAction(record.id, next));
+  };
+  return (
+    <section className={`cs-foundry${all ? " all" : ""}`} aria-label="À reporter dans Foundry">
+      <header className="cs-row-between">
+        <div className="stack-xs">
+          <strong>🧭 À reporter dans Foundry · niveau {todo.level}</strong>
+          <span className="muted small">
+            Ta fiche est à jour ici. Refais ces étapes sur ta fiche Foundry avant la prochaine session ({count}/{todo.items.length}).
+          </span>
+        </div>
+        <span className="cs-foundry-bar" aria-hidden="true">
+          <i style={{ width: `${(count / todo.items.length) * 100}%` }} />
+        </span>
+      </header>
+      <ul className="cs-foundry-list">
+        {todo.items.map((it, i) => (
+          <li key={i}>
+            <label className={`check${done[i] ? " done" : ""}`}>
+              <input type="checkbox" checked={done[i]} onChange={() => toggle(i)} />
+              <span>{it.text}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="pl-actions">
+        <button type="button" className={`btn btn-small${all ? "" : " btn-ghost"}`} disabled={busy} onClick={() => run(foundryTodoAction(record.id, null))}>
+          {all ? "C'est tout bon, retirer la liste" : "Masquer la liste"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- Propositions venues du coffre ---------- */
+
+function ProposalBanner({ proposal, busy, onWithdraw }: { proposal: MyProposal; busy: boolean; onWithdraw: () => void }) {
+  const refused = proposal.status === "refused";
+  return (
+    <div className={`cs-proposal${refused ? " refused" : ""}`}>
+      <span aria-hidden="true">🗝️</span>
+      <div className="stack-xs">
+        <strong>
+          {refused ? `Ton MJ n'a pas retenu ${proposal.name}.` : `Tu as proposé ${proposal.name} (${proposal.label}) à ton MJ.`}
+        </strong>
+        {refused && proposal.reason && <em>« {proposal.reason} »</em>}
+        <span className="muted small">
+          {refused ? "Tu peux modifier ton essai dans le Coffre et le proposer à nouveau, ou créer un personnage ici." : "En attente de sa réponse : elle s'affichera ici."}
+        </span>
+      </div>
+      <button type="button" className="btn btn-ghost btn-small" onClick={onWithdraw} disabled={busy}>
+        {refused ? "Effacer" : "Retirer"}
+      </button>
+    </div>
+  );
+}
+
+function ProposalReview({
+  proposal,
+  busy,
+  onBack,
+  onAccept,
+  onRefuse,
+}: {
+  proposal: PendingProposal & { ownerName: string; groupName: string };
+  busy: boolean;
+  onBack: () => void;
+  onAccept: () => void;
+  onRefuse: (reason: string) => void;
+}) {
+  const [refusing, setRefusing] = useState(false);
+  const [reason, setReason] = useState("");
+  const s = proposal.state;
+  return (
+    <section className="stack-lg">
+      <div>
+        <button type="button" className="btn btn-ghost btn-small" onClick={onBack}>
+          ← Retour aux fiches
+        </button>
+      </div>
+      <div className="cs-proposal-review">
+        <div className="stack-xs">
+          <p className="eyebrow">Proposition venue du coffre · {proposal.groupName}</p>
+          <h1 className="title">
+            {s.name} <span className="muted">· {proposal.ownerName}</span>
+          </h1>
+          <p className="muted">
+            {shortLabel(s)}. Les règles de campagne ont été vérifiées (pas de valeurs libres) et les PV des niveaux au-delà du 1er sont à la moyenne. En
+            acceptant, ce personnage devient la fiche de {proposal.ownerName} dans ce groupe, au niveau {s.level}.
+          </p>
+          {proposal.message && <blockquote className="cs-proposal-msg">« {proposal.message} »</blockquote>}
+        </div>
+        {refusing ? (
+          <form
+            className="stack"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onRefuse(reason);
+            }}
+          >
+            <label className="field">
+              <span className="label">Un mot pour {proposal.ownerName} (facultatif)</span>
+              <textarea className="input textarea" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} autoFocus placeholder="Ex. Plutôt un lanceur de sorts pour équilibrer le groupe ?" />
+            </label>
+            <div className="pl-actions">
+              <button className="btn btn-danger btn-small" disabled={busy}>
+                Refuser
+              </button>
+              <button type="button" className="btn btn-ghost btn-small" onClick={() => setRefusing(false)}>
+                Annuler
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="pl-actions">
+            <button type="button" className="btn" disabled={busy} onClick={onAccept}>
+              ✓ Accepter {s.name}
+            </button>
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setRefusing(true)}>
+              Refuser…
+            </button>
+          </div>
+        )}
+      </div>
+      <Sheet
+        key={`proposal-${proposal.id}`}
+        record={{ id: proposal.id, ownerId: "", groupId: null, ownerName: proposal.ownerName, state: s, grantedLevel: s.level, updatedAt: proposal.createdAt }}
+        editable={false}
+        canLevelUp={false}
+        onSave={async () => false}
+      />
+    </section>
   );
 }

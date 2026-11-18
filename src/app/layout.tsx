@@ -10,6 +10,9 @@ const sans = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap
 export const metadata: Metadata = {
   title: "Outils JDR",
   description: "Les outils de la table, pour les joueurs.",
+  icons: { icon: [{ url: "/icons/favicon-32.png", sizes: "32x32" }, { url: "/icons/icon-192.png", sizes: "192x192" }], apple: "/icons/apple-touch-icon.png" },
+  // Installé sur l'écran d'accueil d'un iPhone : plein écran, nom court.
+  appleWebApp: { capable: true, title: "Table JDR", statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
