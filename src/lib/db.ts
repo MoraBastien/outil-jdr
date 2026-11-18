@@ -1,8 +1,9 @@
-// Stockage très simple dans un fichier JSON (data/db.json).
-// Suffisant pour une table de JDR ; à remplacer par une vraie base si besoin.
+// Stockage très simple : un seul document JSON, dans Upstash Redis (Vercel) ou dans data/db.json (local).
+// Suffisant pour une table de JDR.
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID, randomInt } from "crypto";
+import { Redis } from "@upstash/redis";
 
 export type Role = "admin" | "player";
 
@@ -63,47 +64,108 @@ export type Poll = {
 
 export type Db = { users: User[]; homunculi?: StoredHomunculus[]; diceLog?: DiceLogEntry[]; polls?: Poll[] };
 
-const DB_PATH = path.join(process.cwd(), "data", "db.json");
+// ---------------------------------------------------------------------------
+// Stockage
+// - Si les variables Upstash Redis sont définies (Vercel) : tout le document est
+//   stocké sous une seule clé Redis.
+// - Sinon (en local, VPS) : fichier data/db.json, comme avant.
+// ---------------------------------------------------------------------------
 
-async function save(db: Db): Promise<void> {
+const DB_PATH = path.join(process.cwd(), "data", "db.json");
+const REDIS_KEY = "jdr:db";
+
+// Noms créés par l'intégration Upstash de Vercel (KV_*) ou par Upstash directement (UPSTASH_*).
+const REDIS_URL = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
+const REDIS_TOKEN = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+
+// On récupère le JSON brut (pas de désérialisation auto) pour pouvoir le comparer tel quel.
+const redis =
+  REDIS_URL && REDIS_TOKEN
+    ? new Redis({ url: REDIS_URL, token: REDIS_TOKEN, automaticDeserialization: false })
+    : null;
+
+function initialDb(): Db {
+  return {
+    users: [
+      {
+        id: randomUUID(),
+        name: "Maître du jeu",
+        code: process.env.ADMIN_CODE ?? "MJ-SECRET",
+        role: "admin",
+        tools: [],
+        profile: { fields: [], notes: "" },
+      },
+    ],
+  };
+}
+
+/** Le document tel qu'il est stocké (JSON brut), pour détecter une modification concurrente. */
+type Snapshot = { db: Db; raw: string | null };
+
+async function readSnapshot(): Promise<Snapshot> {
+  if (redis) {
+    let raw = await redis.get<string>(REDIS_KEY);
+    if (raw === null) {
+      // Premier lancement : on crée la base avec le compte MJ (NX = seulement si absente).
+      await redis.set(REDIS_KEY, JSON.stringify(initialDb(), null, 2), { nx: true });
+      raw = await redis.get<string>(REDIS_KEY);
+    }
+    return { db: JSON.parse(raw as string) as Db, raw };
+  }
+
+  try {
+    const raw = await fs.readFile(DB_PATH, "utf8");
+    return { db: JSON.parse(raw) as Db, raw };
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    const db = initialDb();
+    await writeFile(db);
+    return { db, raw: null };
+  }
+}
+
+async function writeFile(db: Db): Promise<void> {
   await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
   const tmp = `${DB_PATH}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(db, null, 2), "utf8");
   await fs.rename(tmp, DB_PATH);
 }
 
+// Écrit seulement si personne n'a modifié la base depuis la lecture (opération atomique côté Redis).
+const COMPARE_AND_SET = `
+local current = redis.call("GET", KEYS[1])
+if current == ARGV[1] then
+  redis.call("SET", KEYS[1], ARGV[2])
+  return 1
+end
+return 0
+`;
+
 async function load(): Promise<Db> {
-  try {
-    return JSON.parse(await fs.readFile(DB_PATH, "utf8")) as Db;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-    // Premier lancement : on crée la base avec le compte MJ.
-    const db: Db = {
-      users: [
-        {
-          id: randomUUID(),
-          name: "Maître du jeu",
-          code: process.env.ADMIN_CODE ?? "MJ-SECRET",
-          role: "admin",
-          tools: [],
-          profile: { fields: [], notes: "" },
-        },
-      ],
-    };
-    await save(db);
-    return db;
-  }
+  return (await readSnapshot()).db;
 }
 
-// Les écritures sont sérialisées pour éviter que deux requêtes s'écrasent.
+// Les écritures sont sérialisées dans ce processus pour éviter que deux requêtes s'écrasent.
 let queue: Promise<unknown> = Promise.resolve();
 
 export function updateDb<T>(fn: (db: Db) => T | Promise<T>): Promise<T> {
   const run = queue.then(async () => {
-    const db = await load();
-    const result = await fn(db);
-    await save(db);
-    return result;
+    if (!redis) {
+      const { db } = await readSnapshot();
+      const result = await fn(db);
+      await writeFile(db);
+      return result;
+    }
+
+    // Sur Vercel, plusieurs instances tournent en parallèle : si la base a changé entre la
+    // lecture et l'écriture, on relit et on rejoue la modification.
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const { db, raw } = await readSnapshot();
+      const result = await fn(db);
+      const written = await redis.eval(COMPARE_AND_SET, [REDIS_KEY], [raw as string, JSON.stringify(db, null, 2)]);
+      if (Number(written) === 1) return result;
+    }
+    throw new Error("Base de données trop sollicitée, réessaie dans un instant.");
   });
   queue = run.catch(() => {});
   return run;
