@@ -26,7 +26,7 @@ export default async function CharacterWidget({ user }: { user: User }) {
               ) : (
                 <ul className="pw-list cs-widget-roster">
                   {members.map((p) => {
-                    const c = chars.find((x) => x.ownerId === p.id && x.groupId === g.id);
+                    const c = chars.find((x) => x.ownerId === p.id && x.groupId === g.id && !x.deadAt);
                     const s = c?.state as CharacterState | undefined;
                     return (
                       <li key={p.id}>
@@ -53,7 +53,7 @@ export default async function CharacterWidget({ user }: { user: User }) {
   return (
     <div className="cs-widget-groups">
       {groups.map((g) => {
-        const c = chars.find((x) => x.ownerId === user.id && x.groupId === g.id);
+        const c = chars.find((x) => x.ownerId === user.id && x.groupId === g.id && !x.deadAt);
         return (
           <div key={g.id} className="stack-xs">
             {multi && <span className="label">👥 {g.name}</span>}

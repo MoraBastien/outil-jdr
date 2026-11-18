@@ -71,7 +71,10 @@ export default function Sheet({
   onSave,
   onLevelUp,
   canLevelUp,
+  dead,
 }: {
+  /** Personnage mort : bandeau funèbre (la fiche est en lecture seule). */
+  dead?: { epitaph: string; diedAt: string };
   record: CharacterRecord;
   editable: boolean;
   onSave: (patch: Patch) => Promise<boolean>;
@@ -122,7 +125,18 @@ export default function Sheet({
   const hpRatio = d.hpMax ? s.play.hp / d.hpMax : 0;
 
   return (
-    <div className="cs-sheet">
+    <div className={`cs-sheet${dead ? " is-dead" : ""}`}>
+      {dead && (
+        <div className="cs-dead-banner">
+          <span aria-hidden="true">🪦</span>
+          <div className="stack-xs">
+            <strong>
+              Mort le {new Date(dead.diedAt).toLocaleDateString("fr-FR", { dateStyle: "long" })}
+            </strong>
+            {dead.epitaph && <em>« {dead.epitaph} »</em>}
+          </div>
+        </div>
+      )}
       {/* Bandeau */}
       <header className="cs-banner">
         <div className="cs-portrait" aria-hidden="true">
@@ -570,6 +584,18 @@ export default function Sheet({
             <Section title="Personnalité">
               <TextField multiline value={s.identity.personality} onCommit={(v) => patch({ identity: { ...s.identity, personality: v } })} disabled={!editable} label="Personnalité" placeholder="Traits, idéaux, liens, défauts…" />
             </Section>
+            {(["ideals", "bonds", "flaws"] as const).map((k) => (
+              <Section key={k} title={{ ideals: "Idéaux", bonds: "Liens", flaws: "Défauts" }[k]}>
+                <TextField
+                  multiline
+                  rows={3}
+                  value={s.identity[k] ?? ""}
+                  onCommit={(v) => patch({ identity: { ...s.identity, [k]: v } })}
+                  disabled={!editable}
+                  label={k}
+                />
+              </Section>
+            ))}
             <Section title="Histoire">
               <TextField multiline value={s.identity.backstory} onCommit={(v) => patch({ identity: { ...s.identity, backstory: v } })} disabled={!editable} label="Histoire" />
             </Section>

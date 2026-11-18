@@ -21,6 +21,8 @@ import {
   pointBuyCost,
   validateBackgroundBonus,
   validateScores,
+  FREE_MAX,
+  FREE_MIN,
   type CreationInput,
 } from "../rules";
 import type { Ability, CharacterState, Choice, Scores, SkillId } from "../types";
@@ -49,12 +51,15 @@ const blankScores = (): Scores => ({ str: 0, dex: 0, con: 0, int: 0, wis: 0, cha
 
 export default function CreationWizard({
   forName,
+  free = false,
   busy,
   onCreate,
   onCancel,
 }: {
   /** Nom du joueur, quand le MJ crée la fiche pour lui. */
   forName?: string;
+  /** Mode coffre : valeurs de caractéristiques libres et plus de champs de texte. */
+  free?: boolean;
   busy: boolean;
   onCreate: (input: CreationInput) => Promise<boolean>;
   onCancel?: () => void;
@@ -71,7 +76,8 @@ export default function CreationWizard({
     backgroundBonus: {},
     answers: {},
   });
-  const [identity, setIdentity] = useState({ alignment: "", personality: "" });
+  const [identity, setIdentity] = useState({ alignment: "", personality: "", appearance: "", ideals: "", bonds: "", flaws: "", backstory: "" });
+  const [notes, setNotes] = useState("");
   const set = (p: Partial<CreationInput>) => setInput((i) => ({ ...i, ...p }));
   const answer = (key: string, v: string[]) => setInput((i) => ({ ...i, answers: { ...i.answers, [key]: v } }));
 
@@ -108,7 +114,9 @@ export default function CreationWizard({
     return list;
   }, [cls, species, bg, bgFeat, humanFeat]);
 
-  const scoresError = Object.values(input.baseScores).some((v) => !v) ? "Attribue toutes les valeurs." : validateScores(input.scoreMethod, input.baseScores);
+  const scoresError = Object.values(input.baseScores).some((v) => !v)
+    ? "Attribue toutes les valeurs."
+    : validateScores(input.scoreMethod, input.baseScores, { allowFree: free });
   const bonusError = bg ? validateBackgroundBonus(bg.abilities, input.backgroundBonus) : "Choisis un historique.";
 
   const canNext = [
@@ -125,7 +133,7 @@ export default function CreationWizard({
   const preview = useMemo(() => {
     if (step < 6) return null;
     try {
-      return { state: buildCharacter(input) as CharacterState, error: null };
+      return { state: buildCharacter(input, { allowFree: free }) as CharacterState, error: null };
     } catch (e) {
       return { state: null, error: (e as Error).message };
     }
@@ -135,7 +143,7 @@ export default function CreationWizard({
     <div className="cs-wizard">
       <header className="cs-wizard-head">
         <div>
-          <p className="eyebrow">{forName ? `Nouveau personnage pour ${forName}` : "Nouveau personnage"}</p>
+          <p className="eyebrow">{forName ? `Nouveau personnage pour ${forName}` : free ? "Nouvel essai · coffre" : "Nouveau personnage"}</p>
           <h2 className="title">{STEPS[step]}</h2>
         </div>
         {onCancel && (
@@ -368,7 +376,7 @@ export default function CreationWizard({
         )}
 
         {/* 4. Caractéristiques */}
-        {step === 3 && cls && bg && <ScoresStep input={input} set={set} cls={cls.id} error={scoresError ?? bonusError} />}
+        {step === 3 && cls && bg && <ScoresStep input={input} set={set} cls={cls.id} error={scoresError ?? bonusError} free={free} />}
 
         {/* 5. Compétences et capacités */}
         {step === 4 && (
@@ -400,6 +408,36 @@ export default function CreationWizard({
               <span className="label">Personnalité (facultatif)</span>
               <textarea className="input textarea" rows={3} value={identity.personality} onChange={(e) => setIdentity({ ...identity, personality: e.target.value })} placeholder="Un trait, un idéal, un lien, un défaut…" />
             </label>
+            {free && (
+              <>
+                <p className="muted small">
+                  Dans le coffre, tout est permis : remplis ce qui t&apos;inspire, laisse vide le reste. <Hint>Ces textes restent sur la fiche, onglet « Personnage ».</Hint>
+                </p>
+                <div className="grid-2">
+                  {(
+                    [
+                      ["appearance", "Apparence", "Taille, regard, cicatrices, tenue…"],
+                      ["ideals", "Idéaux", "Ce en quoi il croit."],
+                      ["bonds", "Liens", "Les personnes, lieux ou objets qui comptent."],
+                      ["flaws", "Défauts", "Une faiblesse, un vice, une peur."],
+                    ] as const
+                  ).map(([k, label, ph]) => (
+                    <label key={k} className="field">
+                      <span className="label">{label}</span>
+                      <textarea className="input textarea" rows={3} value={identity[k]} onChange={(e) => setIdentity({ ...identity, [k]: e.target.value })} placeholder={ph} />
+                    </label>
+                  ))}
+                </div>
+                <label className="field">
+                  <span className="label">Histoire</span>
+                  <textarea className="input textarea" rows={5} value={identity.backstory} onChange={(e) => setIdentity({ ...identity, backstory: e.target.value })} placeholder="D'où vient-il ? Pourquoi part-il à l'aventure ?" />
+                </label>
+                <label className="field">
+                  <span className="label">Notes libres</span>
+                  <textarea className="input textarea" rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Idées de build, sorts envisagés, inspirations…" />
+                </label>
+              </>
+            )}
             <p className="muted small">Tu pourras tout compléter plus tard dans l&apos;onglet « Personnage ».</p>
           </div>
         )}
@@ -429,7 +467,7 @@ export default function CreationWizard({
             type="button"
             className="btn"
             disabled={busy || !preview || Boolean(preview.error)}
-            onClick={() => onCreate({ ...input, identity })}
+            onClick={() => onCreate({ ...input, identity, notes })}
           >
             {busy ? "Création…" : "✦ Créer le personnage"}
           </button>
@@ -439,7 +477,19 @@ export default function CreationWizard({
   );
 }
 
-function ScoresStep({ input, set, cls, error }: { input: CreationInput; set: (p: Partial<CreationInput>) => void; cls: string; error: string | null }) {
+function ScoresStep({
+  input,
+  set,
+  cls,
+  error,
+  free,
+}: {
+  input: CreationInput;
+  set: (p: Partial<CreationInput>) => void;
+  cls: string;
+  error: string | null;
+  free: boolean;
+}) {
   const bg = getBackground(input.backgroundId)!;
   const c = getClass(cls)!;
   const used = Object.values(input.baseScores);
@@ -464,16 +514,21 @@ function ScoresStep({ input, set, cls, error }: { input: CreationInput; set: (p:
 
       <div className="cs-row-between">
         <div className="segmented-tabs" role="tablist">
-          {(["standard", "pointbuy"] as const).map((m) => (
+          {(free ? (["standard", "pointbuy", "free"] as const) : (["standard", "pointbuy"] as const)).map((m) => (
             <button
               key={m}
               type="button"
               role="tab"
               aria-selected={input.scoreMethod === m}
               className={input.scoreMethod === m ? "on" : ""}
-              onClick={() => set({ scoreMethod: m, baseScores: m === "pointbuy" ? { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 } : blankScores() })}
+              onClick={() =>
+                set({
+                  scoreMethod: m,
+                  baseScores: m === "pointbuy" ? { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 } : m === "free" ? { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 } : blankScores(),
+                })
+              }
             >
-              {m === "standard" ? "Tableau standard" : "Achat de points"}
+              {m === "standard" ? "Tableau standard" : m === "pointbuy" ? "Achat de points" : "Valeurs libres"}
             </button>
           ))}
         </div>
@@ -482,6 +537,12 @@ function ScoresStep({ input, set, cls, error }: { input: CreationInput; set: (p:
         </button>
       </div>
 
+      {input.scoreMethod === "free" && (
+        <p className="small">
+          Saisis les valeurs que tu veux, de {FREE_MIN} à {FREE_MAX} : par exemple tes jets de 4d6 faits à la table.{" "}
+          <Hint>Réservé au coffre : pour une fiche de campagne, ton MJ attend le tableau standard ou l&apos;achat de points.</Hint>
+        </p>
+      )}
       {input.scoreMethod === "pointbuy" && (
         <p className="small">
           Points dépensés : <b>{pointBuyCost(input.baseScores)}</b> / {POINT_BUY_BUDGET}{" "}
@@ -498,7 +559,17 @@ function ScoresStep({ input, set, cls, error }: { input: CreationInput; set: (p:
               <span className="label">
                 {a.name} {isPrimary && <span className="chip chip-accent">principale</span>}
               </span>
-              {input.scoreMethod === "standard" ? (
+              {input.scoreMethod === "free" ? (
+                <input
+                  type="number"
+                  className="input cs-num"
+                  min={FREE_MIN}
+                  max={FREE_MAX}
+                  value={value || ""}
+                  onChange={(e) => set({ baseScores: { ...input.baseScores, [a.id]: Math.max(0, Math.min(FREE_MAX, Number(e.target.value) || 0)) } })}
+                  aria-label={a.name}
+                />
+              ) : input.scoreMethod === "standard" ? (
                 <select
                   className="input"
                   value={value || ""}

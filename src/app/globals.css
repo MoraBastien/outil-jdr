@@ -1290,3 +1290,114 @@ summary.pl-section-title { cursor: pointer; }
 .cs-tab-glow { position: absolute; top: 8px; right: 8px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent-strong); animation: lu-glow 1.4s ease-in-out infinite alternate; }
 .cs-group-panel { animation: rise 0.4s var(--ease) both; }
 .cs-widget-groups { display: flex; flex-direction: column; gap: 16px; }
+
+/* ==========================================================================
+   Coffre (src/tools/vault)
+   ========================================================================== */
+.vault-head { display: flex; gap: 18px; align-items: flex-start; }
+.vault-icon {
+  flex: 0 0 auto; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 18px; font-size: 2rem;
+  background: linear-gradient(145deg, var(--surface-3), var(--surface-2)); border: 1px solid var(--accent);
+  box-shadow: 0 0 24px -6px rgba(226, 180, 95, 0.5); animation: float 6s ease-in-out infinite;
+}
+.vault-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.vault-card {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 22px 14px 16px; text-align: center; cursor: pointer;
+  font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); animation: rise 0.45s var(--ease) both;
+  transition: transform 0.25s var(--ease), border-color 0.2s, box-shadow 0.25s;
+}
+.vault-card:nth-child(2) { animation-delay: 0.05s; }
+.vault-card:nth-child(3) { animation-delay: 0.1s; }
+.vault-card:nth-child(n + 4) { animation-delay: 0.15s; }
+.vault-card:hover { transform: translateY(-4px) rotate(-0.5deg); border-color: var(--accent); box-shadow: var(--shadow-lg); }
+.vault-card .cs-portrait { margin-bottom: 6px; transition: transform 0.35s cubic-bezier(0.3, 1.5, 0.5, 1); }
+.vault-card:hover .cs-portrait { transform: rotate(-6deg) scale(1.06); }
+.vault-name { font: 500 1.15rem var(--font-title); }
+.vault-new { justify-content: center; border-style: dashed; background: transparent; box-shadow: none; }
+.vault-plus {
+  display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; font-size: 1.8rem; color: var(--accent-text);
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent)); transition: transform 0.4s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.vault-new:hover .vault-plus { transform: rotate(90deg) scale(1.08); }
+.vault-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.vault-levels { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); }
+.vault-levels .label { margin-right: 4px; }
+.vault-level {
+  width: 34px; height: 34px; border-radius: 50%; cursor: pointer; font: 600 0.95rem var(--font-title);
+  color: var(--muted); background: var(--surface-2); border: 1px solid var(--border-strong);
+  transition: transform 0.25s cubic-bezier(0.3, 1.5, 0.5, 1), background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+.vault-level:hover:not(:disabled) { transform: scale(1.12); border-color: var(--accent); color: var(--text); }
+.vault-level:disabled { opacity: 0.35; cursor: not-allowed; }
+.vault-level.on { color: var(--accent-text); background: var(--accent); border-color: var(--accent); opacity: 1; box-shadow: 0 0 16px -4px rgba(226, 180, 95, 0.7); }
+.vault-level.next:not(:disabled) { border-style: dashed; border-color: var(--accent); color: var(--accent-strong); animation: lu-glow 1.8s ease-in-out infinite alternate; }
+.vault-note { margin-top: -12px; }
+
+/* ==========================================================================
+   Cimetière (src/tools/cemetery)
+   ========================================================================== */
+.cem-root { position: relative; }
+.cem-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 18px; }
+.cem-stone {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 30px 16px 20px; text-align: center;
+  border-radius: 100px 100px 10px 10px; border: 1px solid #4a4555;
+  background:
+    radial-gradient(120px 80px at 30% 15%, rgba(255, 255, 255, 0.06), transparent 70%),
+    linear-gradient(180deg, #3a3644, #26232e 70%, #1e1b25);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.06), 0 18px 30px -16px rgba(0, 0, 0, 0.9);
+  animation: stone-rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transition: transform 0.3s var(--ease), box-shadow 0.3s;
+}
+.cem-stone::after {
+  content: ""; position: absolute; left: -10%; right: -10%; bottom: -10px; height: 14px; border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(70, 110, 60, 0.5), transparent 70%); pointer-events: none;
+}
+.cem-stone:hover { transform: translateY(-3px); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.06), 0 0 30px -8px rgba(200, 190, 255, 0.25), 0 24px 40px -18px rgba(0, 0, 0, 0.9); }
+.cem-stone.mine { border-color: rgba(226, 180, 95, 0.45); }
+@keyframes stone-rise { from { opacity: 0; transform: translateY(24px) rotate(-1.5deg); } }
+.cem-cross { font-size: 1.4rem; color: #b8b2c6; text-shadow: 0 0 12px rgba(200, 190, 255, 0.35); }
+.cem-name { font: 500 1.35rem/1.15 var(--font-title); color: #ece8f4; letter-spacing: 0.02em; }
+.cem-label { font-size: 0.82rem; color: #a9a3b8; }
+.cem-date { font-size: 0.8rem; color: #8d879c; letter-spacing: 0.08em; }
+.cem-epitaph {
+  margin: 6px 0 0; font: italic 400 0.95rem/1.45 var(--font-title); color: #d8d2e4;
+  background: none; border: 0; padding: 4px 6px; border-radius: 8px;
+}
+.cem-epitaph.editable { cursor: pointer; transition: background-color 0.2s; }
+.cem-epitaph.editable:hover { background: rgba(255, 255, 255, 0.05); }
+.cem-edit { width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.cem-revive { font-size: 0.78rem; margin-top: 4px; }
+.cem-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 30px; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
+.cem-empty span { font-size: 2rem; animation: float 5s ease-in-out infinite; }
+
+/* Personnage mort */
+.cs-dead-banner {
+  display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: var(--radius);
+  border: 1px solid #4a4555; background: linear-gradient(135deg, #2b2834, #1c1a22); color: #d8d2e4;
+  animation: rise 0.5s var(--ease) both;
+}
+.cs-dead-banner > span { font-size: 1.8rem; }
+.cs-dead-banner em { font-family: var(--font-title); }
+.cs-sheet.is-dead .cs-banner, .cs-sheet.is-dead .cs-vitals { filter: grayscale(0.85); opacity: 0.85; }
+.cs-death-btn:hover { color: #d8d2e4 !important; border-color: #8d879c !important; }
+.cs-death-form {
+  display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: var(--radius);
+  border: 1px solid rgba(239, 111, 100, 0.4); background: var(--danger-soft); animation: rise 0.3s var(--ease) both;
+}
+
+/* Widget Cimetière */
+.cem-w-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cem-w-list > li { animation: stone-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.cem-w-stone {
+  display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-radius: 40px 12px 12px 40px;
+  border: 1px solid #4a4555; background: linear-gradient(135deg, #3a3644, #22202a);
+  transition: transform 0.25s var(--ease), box-shadow 0.25s;
+}
+.cem-w-stone:hover { color: inherit; transform: translateX(3px); box-shadow: 0 0 24px -8px rgba(200, 190, 255, 0.3); }
+.cem-w-cross { display: grid; place-items: center; flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; color: #b8b2c6; background: rgba(255, 255, 255, 0.05); text-shadow: 0 0 10px rgba(200, 190, 255, 0.4); }
+.cem-w-name { font: 500 1.1rem var(--font-title); color: #ece8f4; }
+.cem-w-meta { font-size: 0.8rem; color: #a9a3b8; }
+.cem-w-epitaph { font: italic 0.9rem/1.4 var(--font-title); color: #d8d2e4; }
+.cem-w-empty { display: flex; align-items: center; gap: 12px; }
+.cem-w-empty span { font-size: 1.6rem; animation: float 5s ease-in-out infinite; }

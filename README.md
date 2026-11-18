@@ -109,6 +109,24 @@ Option `wide: true` dans le registre : page pleine largeur, sans carte ni titre 
   capacité, renseigner `choice` (`options`, `skills`, `expertise`, `subclass` ou `asi`) : création, montée de niveau et
   validation le prennent en compte automatiquement.
 
+## Coffre (`src/tools/vault/`)
+
+- Ouvert à tous les joueurs (pas de case à cocher). Chacun y garde jusqu'à 30 essais de personnages (`vault` dans
+  db.json), indépendants des groupes.
+- Même assistant de création, en plus libre : méthode « Valeurs libres » (3 à 18) et plus de champs de texte
+  (apparence, idéaux, liens, défauts, histoire, notes). Les valeurs libres sont refusées par le serveur hors du coffre.
+- Le joueur choisit son niveau : il monte sans accord du MJ, et peut revenir à un niveau précédent (on restaure la
+  copie de ce niveau en gardant ses textes et son équipement). Il peut aussi dupliquer ou supprimer un essai.
+
+## Cimetière (`src/tools/cemetery/`)
+
+- Un cimetière par groupe, visible de ses membres (outil de groupe, comme le planning).
+- Le MJ déclare un personnage mort depuis la fiche (bouton « Déclarer mort », épitaphe facultative). La fiche devient
+  inutilisable (lecture seule, rangée dans les fiches archivées du MJ) et le joueur peut créer un nouveau personnage
+  dans ce groupe.
+- Chaque tombe (`graves` dans db.json) garde nom, espèce/classe/niveau, date et épitaphe. Le MJ modifie l'épitaphe en
+  cliquant dessus, ou ramène le personnage à la vie (si le joueur n'a pas déjà un autre personnage dans ce groupe).
+
 ## Administration
 
 - `/admin` : résumé, création de joueur, liste des joueurs (recherche dès 5 joueurs, clic sur le code pour le copier).

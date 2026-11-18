@@ -11,6 +11,11 @@ import CharacterTool from "./character/CharacterTool";
 import CharacterWidget from "./character/CharacterWidget";
 import { CHARACTER_TOOL_ID } from "./character/types";
 import Planning from "./planning/Planning";
+import VaultTool from "./vault/VaultTool";
+import { VAULT_TOOL_ID } from "./vault/meta";
+import Cemetery from "./cemetery/Cemetery";
+import CemeteryWidget from "./cemetery/CemeteryWidget";
+import { CEMETERY_TOOL_ID } from "./cemetery/meta";
 import PlanningWidget from "./planning/PlanningWidget";
 import { PLANNING_TOOL_ID } from "./planning/types";
 import { TOOL_META as HOMUNCULUS_META } from "./homunculus-creator/meta";
@@ -89,6 +94,22 @@ export const TOOLS: ToolDefinition[] = [
     component: CharacterTool,
     wide: true,
     widget: { component: CharacterWidget, title: "Mes personnages", adminTitle: "Personnages de la table", wide: true, order: 5 },
+  },
+  {
+    id: VAULT_TOOL_ID, // "coffre"
+    name: "Coffre",
+    description: "Expérimente la création de personnages et garde tes essais. Ici, c'est toi qui choisis le niveau.",
+    icon: "🗝️",
+    component: VaultTool,
+    wide: true,
+  },
+  {
+    id: CEMETERY_TOOL_ID, // "cimetiere"
+    name: "Cimetière",
+    description: "Les héros tombés de ta campagne, et leur épitaphe.",
+    icon: "🪦",
+    component: Cemetery,
+    widget: { component: CemeteryWidget, title: "Cimetière", order: 40 },
   },
   // { id: "mon-outil", name: "Mon outil", description: "…", icon: "🗺️", component: MonOutil, widget: { component: MonWidget } },
 ];

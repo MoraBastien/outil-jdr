@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { updateDb, normalizeCode, generateCode, randomUUID, type ProfileField, type User } from "@/lib/db";
 import { TOOLS } from "@/tools/registry";
-import { addMember, isGroupTool, removeMember } from "@/lib/groups";
+import { addMember, isAutoTool, removeMember } from "@/lib/groups";
 import { clampEcho } from "@/tools/homunculus/echo";
 
 function back(path: string, params: Record<string, string> = {}): never {
@@ -60,7 +60,7 @@ export async function updatePlayer(formData: FormData): Promise<void> {
   const code = String(formData.get("code") ?? "").trim();
   const validIds = new Set(TOOLS.map((t) => t.id));
   // Le planning et la fiche de personnage dépendent des groupes, pas d'une case à cocher.
-  const tools = formData.getAll("tools").map(String).filter((t) => validIds.has(t) && !isGroupTool(t));
+  const tools = formData.getAll("tools").map(String).filter((t) => validIds.has(t) && !isAutoTool(t));
   const groupIds = formData.getAll("groups").map(String);
   const echo = clampEcho(formData.get("echo"));
   const fields = parseFields(formData);
@@ -95,6 +95,7 @@ export async function deletePlayer(formData: FormData): Promise<void> {
     // Données d'outils liées au joueur.
     db.homunculi = (db.homunculi ?? []).filter((h) => h.ownerId !== id);
     db.characters = (db.characters ?? []).filter((c) => c.ownerId !== id);
+    db.vault = (db.vault ?? []).filter((c) => c.ownerId !== id);
     db.diceLog = (db.diceLog ?? []).filter((d) => d.userId !== id);
     for (const poll of db.polls ?? []) delete poll.responses[id];
   });
@@ -145,6 +146,7 @@ export async function deleteGroup(formData: FormData): Promise<void> {
     db.groups = (db.groups ?? []).filter((g) => g.id !== id);
     for (const u of db.users) removeMember(u, id);
     db.polls = (db.polls ?? []).filter((p) => p.groupId !== id);
+    db.graves = (db.graves ?? []).filter((g) => g.groupId !== id);
   });
   back("/admin", { ok: name ? `Groupe « ${name} » supprimé.` : "Groupe introuvable." });
 }

@@ -376,12 +376,18 @@ export type CreationInput = {
   speciesId: string;
   backgroundId: string;
   speciesOptions: Record<string, string>;
-  scoreMethod: "standard" | "pointbuy";
+  scoreMethod: "standard" | "pointbuy" | "free";
   baseScores: Scores;
   backgroundBonus: Partial<Scores>;
   answers: Answers;
-  identity?: { alignment?: string; personality?: string };
+  identity?: Partial<CharacterState["identity"]>;
+  notes?: string;
 };
+
+/** Options de création : le coffre autorise les valeurs de caractéristiques libres. */
+export type BuildOptions = { allowFree?: boolean };
+export const FREE_MIN = 3;
+export const FREE_MAX = 18;
 
 export const CLASS_SKILLS_KEY = "class-skills";
 export const SPECIES_SKILL_KEY = "species-skill";
@@ -401,9 +407,14 @@ export function creationClassChoices(cls: ClassDef): Choice[] {
   return [skillChoice, ...cls.levels[1].flatMap((f) => (f.choice ? [f.choice] : []))];
 }
 
-export function validateScores(method: "standard" | "pointbuy", base: Scores): string | null {
+export function validateScores(method: CreationInput["scoreMethod"], base: Scores, opts: BuildOptions = {}): string | null {
   const values = ABILITY_IDS.map((a) => base[a]);
   if (values.some((v) => !Number.isInteger(v))) return "Caractéristiques invalides.";
+  if (method === "free") {
+    if (!opts.allowFree) return "Les valeurs libres ne sont permises que dans le coffre.";
+    if (values.some((v) => v < FREE_MIN || v > FREE_MAX)) return `Avec les valeurs libres, chaque caractéristique va de ${FREE_MIN} à ${FREE_MAX}.`;
+    return null;
+  }
   if (method === "standard") {
     const sorted = [...values].sort((a, b) => b - a);
     if (sorted.join() !== STANDARD_ARRAY.join()) return "Utilise chaque valeur du tableau standard une fois (15, 14, 13, 12, 10, 8).";
@@ -477,7 +488,7 @@ export function emptyState(): CharacterState {
 }
 
 /** Construit un personnage de niveau 1 à partir des choix du joueur. Lève une RuleError si un choix est invalide. */
-export function buildCharacter(input: CreationInput): CharacterState {
+export function buildCharacter(input: CreationInput, opts: BuildOptions = {}): CharacterState {
   const cls = getClass(input.classId) ?? fail("Choisis une classe.");
   const species = getSpecies(input.speciesId) ?? fail("Choisis une espèce.");
   const bg = getBackground(input.backgroundId) ?? fail("Choisis un historique.");
@@ -486,8 +497,17 @@ export function buildCharacter(input: CreationInput): CharacterState {
 
   const s = emptyState();
   s.name = name;
-  s.identity.alignment = String(input.identity?.alignment ?? "").slice(0, 200);
-  s.identity.personality = String(input.identity?.personality ?? "").slice(0, 4000);
+  const id = input.identity ?? {};
+  s.identity = {
+    alignment: String(id.alignment ?? "").slice(0, 200),
+    appearance: String(id.appearance ?? "").slice(0, 4000),
+    personality: String(id.personality ?? "").slice(0, 4000),
+    backstory: String(id.backstory ?? "").slice(0, 8000),
+    ideals: String(id.ideals ?? "").slice(0, 2000),
+    bonds: String(id.bonds ?? "").slice(0, 2000),
+    flaws: String(id.flaws ?? "").slice(0, 2000),
+  };
+  s.notes = String(input.notes ?? "").slice(0, 8000);
   s.classId = cls!.id;
   s.speciesId = species!.id;
   s.backgroundId = bg!.id;
@@ -502,7 +522,7 @@ export function buildCharacter(input: CreationInput): CharacterState {
   // Caractéristiques.
   const base = zeroScores();
   for (const a of ABILITY_IDS) base[a] = Number(input.baseScores?.[a]);
-  const scoreError = validateScores(input.scoreMethod, base);
+  const scoreError = validateScores(input.scoreMethod, base, opts);
   if (scoreError) fail(scoreError);
   s.scoreMethod = input.scoreMethod;
   s.baseScores = base;
@@ -628,7 +648,11 @@ export function sanitizeFree(current: CharacterState, patch: Partial<CharacterSt
     if (k in patch) s[k] = str(patch[k]);
   }
   if (patch.coins) for (const k of ["pp", "po", "pe", "pa", "pc"] as const) s.coins[k] = int(patch.coins[k], 0, 1_000_000);
-  if (patch.identity) for (const k of ["alignment", "appearance", "personality", "backstory"] as const) s.identity[k] = str(patch.identity[k]);
+  if (patch.identity) {
+    for (const k of ["alignment", "appearance", "personality", "backstory", "ideals", "bonds", "flaws"] as const) {
+      if (k in patch.identity) s.identity[k] = str(patch.identity[k]);
+    }
+  }
   if (patch.play) {
     const p = patch.play;
     const after = derive(s);

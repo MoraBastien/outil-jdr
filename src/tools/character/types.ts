@@ -68,7 +68,8 @@ export type CharacterState = {
   backgroundId: string;
   level: number;
 
-  scoreMethod: "standard" | "pointbuy";
+  /** "free" : valeurs saisies librement (3 à 18), seulement dans le coffre. */
+  scoreMethod: "standard" | "pointbuy" | "free";
   /** Valeurs choisies (tableau standard ou achat de points), avant bonus. */
   baseScores: Scores;
   /** Bonus d'historique : +2/+1 ou +1/+1/+1. */
@@ -95,7 +96,15 @@ export type CharacterState = {
   languages: string;
   tools: string;
   masteries: string;
-  identity: { alignment: string; appearance: string; personality: string; backstory: string };
+  identity: {
+    alignment: string;
+    appearance: string;
+    personality: string;
+    backstory: string;
+    ideals?: string;
+    bonds?: string;
+    flaws?: string;
+  };
   notes: string;
 
   /** État en jeu, modifié pendant les parties. */

@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/auth";
 import { getUsers, getAllHomunculi, getGroups } from "@/lib/db";
-import { isGroupTool, membersOf, userGroupIds } from "@/lib/groups";
+import { isAutoTool, membersOf, userGroupIds } from "@/lib/groups";
 import { TOOLS } from "@/tools/registry";
 import Header from "@/components/Header";
 import Flash from "@/components/Flash";
@@ -30,7 +30,7 @@ export default async function AdminPage({
         name: p.name,
         code: p.code,
         echo: p.tools.includes(HOMUNCULUS_META.id) ? clampEcho(p.echo) : null,
-        tools: TOOLS.filter((t) => !isGroupTool(t.id) && p.tools.includes(t.id)).map((t) => ({ id: t.id, name: t.name, icon: t.icon })),
+        tools: TOOLS.filter((t) => !isAutoTool(t.id) && p.tools.includes(t.id)).map((t) => ({ id: t.id, name: t.name, icon: t.icon })),
         groups: userGroupIds(p).flatMap((g) => (groupName.has(g) ? [groupName.get(g)!] : [])),
         sheets: sheets.length,
         sheetsComplete: sheets.filter((h) => h.complete).length,

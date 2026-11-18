@@ -75,10 +75,25 @@ export type StoredCharacter = {
   state: unknown;
   /** Niveau autorisé par le MJ (le joueur peut monter jusqu'à ce niveau). */
   grantedLevel: number;
+  /** Date de la mort, déclarée par le MJ : la fiche n'est plus modifiable (voir `graves`). */
+  deadAt?: string;
   /** Copie de la fiche à chaque niveau atteint (archive du MJ). */
   snapshots: { level: number; at: string; state: unknown }[];
   createdAt: string;
   updatedAt: string;
+};
+
+/** Tombe du cimetière d'une campagne : garde la mémoire d'un personnage mort. */
+export type Grave = {
+  id: string;
+  groupId: string;
+  characterId: string;
+  ownerId: string;
+  name: string;
+  /** « Elfe roublard · niv. 3 », figé au moment de la mort. */
+  label: string;
+  epitaph: string;
+  diedAt: string;
 };
 
 /** Groupe de jeu (une table, une campagne). Les membres sont les joueurs dont `groupIds` contient son id. */
@@ -91,6 +106,9 @@ export type Db = {
   diceLog?: DiceLogEntry[];
   polls?: Poll[];
   characters?: StoredCharacter[];
+  /** Coffre : les essais de création des joueurs (hors groupe, niveau libre). */
+  vault?: StoredCharacter[];
+  graves?: Grave[];
 };
 
 // ---------------------------------------------------------------------------
@@ -229,6 +247,14 @@ export async function getAllHomunculi(): Promise<StoredHomunculus[]> {
 
 export async function getCharacters(): Promise<StoredCharacter[]> {
   return (await load()).characters ?? [];
+}
+
+export async function getVault(ownerId: string): Promise<StoredCharacter[]> {
+  return ((await load()).vault ?? []).filter((c) => c.ownerId === ownerId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export async function getGraves(): Promise<Grave[]> {
+  return ((await load()).graves ?? []).sort((a, b) => b.diedAt.localeCompare(a.diedAt));
 }
 
 export async function getGroups(): Promise<Group[]> {

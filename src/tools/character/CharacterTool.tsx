@@ -6,6 +6,7 @@ import { useEffect, useState, useTransition, type ReactNode } from "react";
 import type { ToolPlayer } from "../registry";
 import {
   createCharacterAction,
+  declareDeathAction,
   deleteCharacterAction,
   getCharacterViewAction,
   grantLevelAction,
@@ -169,6 +170,16 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
           </>
         ) : (
           <>
+            {current.fallen.map((f) => (
+              <div key={f.diedAt} className="cs-dead-banner">
+                <span aria-hidden="true">🪦</span>
+                <div className="stack-xs">
+                  <strong>{f.name} repose désormais au cimetière.</strong>
+                  {f.epitaph && <em>« {f.epitaph} »</em>}
+                  <span className="muted small">Tu peux créer un nouveau personnage pour continuer l&apos;aventure.</span>
+                </div>
+              </div>
+            )).slice(0, 1)}
             <div className="cs-welcome">
               <p className="eyebrow">
                 Bienvenue, {player.name}
@@ -208,11 +219,13 @@ function AdminPanel({
   const firstSheet = view.groups.flatMap((g) => g.members).find((m) => m.entry)?.entry?.record.id;
   const [sel, setSel] = useState<Selection>(firstSheet ? { kind: "sheet", characterId: firstSheet } : null);
   const [snapshotLevel, setSnapshotLevel] = useState<number | null>(null);
+  const [deathOpen, setDeathOpen] = useState(false);
+  const [epitaph, setEpitaph] = useState("");
 
   const allEntries: AdminEntry[] = [...view.groups.flatMap((g) => g.members.flatMap((m) => (m.entry ? [m.entry] : []))), ...view.archived];
   const selected = sel?.kind === "sheet" ? allEntries.find((e) => e.record.id === sel.characterId) : undefined;
   const isArchived = Boolean(selected && view.archived.some((a) => a.record.id === selected.record.id));
-  const pick = (id: string) => (setSel({ kind: "sheet", characterId: id }), setSnapshotLevel(null));
+  const pick = (id: string) => (setSel({ kind: "sheet", characterId: id }), setSnapshotLevel(null), setDeathOpen(false));
 
   if (sel?.kind === "create") {
     return (
@@ -311,9 +324,19 @@ function AdminPanel({
       {view.archived.length > 0 && (
         <details className="pl-archive">
           <summary className="subtitle">Fiches archivées ({view.archived.length})</summary>
-          <p className="muted small">Fiches dont le groupe a été supprimé ou dont le joueur a quitté le groupe. Le joueur n&apos;y a plus accès.</p>
+          <p className="muted small">
+            Personnages morts, fiches dont le groupe a été supprimé ou dont le joueur a quitté le groupe. Le joueur ne peut plus les modifier.
+          </p>
           <ul className="cs-roster">
-            {view.archived.map((a) => rosterItem(a.record.id, a.record.ownerName, a, undefined, a.groupName ? `Ancien groupe : ${a.groupName}` : "Sans groupe"))}
+            {view.archived.map((a) =>
+              rosterItem(
+                a.record.id,
+                a.record.ownerName,
+                a,
+                undefined,
+                a.dead ? `🪦 Mort${a.groupName ? ` · ${a.groupName}` : ""}` : a.groupName ? `Ancien groupe : ${a.groupName}` : "Sans groupe",
+              ),
+            )}
           </ul>
         </details>
       )}
@@ -355,6 +378,11 @@ function AdminPanel({
               >
                 Télécharger (JSON)
               </button>
+              {!isArchived && (
+                <button type="button" className="btn btn-ghost btn-small cs-death-btn" onClick={() => setDeathOpen((o) => !o)} aria-expanded={deathOpen}>
+                  🪦 Déclarer mort
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-ghost btn-small pl-delete"
@@ -371,18 +399,52 @@ function AdminPanel({
             </div>
           </div>
 
+          {deathOpen && !isArchived && (
+            <form
+              className="cs-death-form"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const r = await run(declareDeathAction(selected.record.id, epitaph));
+                if (r?.ok) {
+                  setDeathOpen(false);
+                  setEpitaph("");
+                }
+              }}
+            >
+              <strong>{selected.record.state.name} tombe au combat ?</strong>
+              <p className="muted small">
+                Le personnage rejoint le cimetière du groupe et sa fiche devient inutilisable pour {selected.record.ownerName}, qui pourra en créer un nouveau.
+              </p>
+              <label className="field">
+                <span className="label">Épitaphe (facultative, modifiable ensuite dans le cimetière)</span>
+                <input className="input" value={epitaph} onChange={(e) => setEpitaph(e.target.value)} maxLength={300} placeholder="Ex. Il a ouvert la mauvaise porte." autoFocus />
+              </label>
+              <div className="pl-actions">
+                <button className="btn btn-danger btn-small" disabled={busy}>
+                  Confirmer la mort
+                </button>
+                <button type="button" className="btn btn-ghost btn-small" onClick={() => setDeathOpen(false)}>
+                  Annuler
+                </button>
+              </div>
+            </form>
+          )}
+
           {snapshot || isArchived ? (
             <>
               <p className="muted small">
                 {snapshot
                   ? `Copie en lecture seule, enregistrée le ${new Date(snapshot.at).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })}.`
-                  : "Fiche archivée, en lecture seule."}
+                  : selected.dead
+                    ? "Personnage mort, fiche en lecture seule."
+                    : "Fiche archivée, en lecture seule."}
               </p>
               <Sheet
                 key={`ro-${selected.record.id}-${snapshot?.level ?? "now"}`}
                 record={snapshot ? { ...selected.record, state: snapshot.state } : selected.record}
                 editable={false}
                 canLevelUp={false}
+                dead={snapshot ? undefined : selected.dead}
                 onSave={async () => false}
               />
             </>

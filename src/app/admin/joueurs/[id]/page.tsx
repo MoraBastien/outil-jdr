@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { getUserById, getHomunculi, getGroups } from "@/lib/db";
-import { isGroupTool, userGroupIds } from "@/lib/groups";
+import { isAlwaysTool, isGroupTool, userGroupIds } from "@/lib/groups";
 import { TOOLS } from "@/tools/registry";
 import Header from "@/components/Header";
 import Flash from "@/components/Flash";
@@ -57,7 +57,7 @@ export default async function PlayerPage({
           // Réinitialise l'état local (dont « non enregistré ») après chaque enregistrement.
           key={JSON.stringify(editorPlayer) + (ok ?? "")}
           player={editorPlayer}
-          tools={TOOLS.map((t) => ({ id: t.id, name: t.name, icon: t.icon, description: t.description, byGroup: isGroupTool(t.id) }))}
+          tools={TOOLS.map((t) => ({ id: t.id, name: t.name, icon: t.icon, description: t.description, byGroup: isGroupTool(t.id), always: isAlwaysTool(t.id) }))}
           groups={groups.map((g) => ({ id: g.id, name: g.name }))}
           homunculusToolId={HOMUNCULUS_META.id}
           maxEcho={MAX_ECHO}

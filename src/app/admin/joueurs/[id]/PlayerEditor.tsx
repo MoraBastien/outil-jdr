@@ -17,7 +17,7 @@ export type EditorPlayer = {
   notes: string;
 };
 
-export type EditorTool = { id: string; name: string; icon: string; description: string; byGroup?: boolean };
+export type EditorTool = { id: string; name: string; icon: string; description: string; byGroup?: boolean; always?: boolean };
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // sans 0/O, 1/I/L
 
@@ -158,6 +158,17 @@ export default function PlayerEditor({
         <h2 className="subtitle">Outils autorisés</h2>
         <div className="tool-toggles">
           {tools.map((t) => {
+            if (t.always) {
+              return (
+                <div key={t.id} className="tool-toggle auto on">
+                  <span className="tool-icon">{t.icon}</span>
+                  <span className="stack-xs">
+                    <strong>{t.name}</strong>
+                    <span className="muted small">Toujours disponible pour tous les joueurs.</span>
+                  </span>
+                </div>
+              );
+            }
             if (t.byGroup) {
               const on = memberOf.length > 0;
               return (
