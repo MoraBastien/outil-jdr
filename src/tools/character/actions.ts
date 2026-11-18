@@ -216,6 +216,31 @@ export async function grantLevelAction(characterId: string, level: number): Prom
   });
 }
 
+/**
+ * MJ : accorde le niveau suivant à tous les personnages vivants d'un groupe.
+ * Ceux qui ont déjà une montée en attente ou qui sont au niveau maximum ne changent pas.
+ */
+export async function grantGroupLevelAction(groupId: string): Promise<ActionResult> {
+  const user = await requireToolUser();
+  return guard(user, async () => {
+    if (user.role !== "admin") throw new RuleError("Réservé au MJ.");
+    await updateDb((db) => {
+      if (!(db.groups ?? []).some((g) => g.id === groupId)) throw new RuleError("Groupe introuvable.");
+      const members = new Set(membersOf(db.users, groupId).map((u) => u.id));
+      const now = new Date().toISOString();
+      let n = 0;
+      for (const c of db.characters ?? []) {
+        const level = (c.state as CharacterState).level;
+        if (c.groupId !== groupId || c.deadAt || !members.has(c.ownerId) || level >= MAX_LEVEL || c.grantedLevel > level) continue;
+        c.grantedLevel = level + 1;
+        c.updatedAt = now;
+        n++;
+      }
+      if (n === 0) throw new RuleError("Aucun personnage de ce groupe ne peut recevoir de niveau (déjà accordé ou niveau maximum).");
+    });
+  });
+}
+
 /* ---------- Préparer sa montée de niveau à l'avance ---------- */
 
 /** Nettoie des réponses envoyées par le navigateur (le moteur de règles vérifie ensuite leur validité). */

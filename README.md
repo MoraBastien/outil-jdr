@@ -116,6 +116,8 @@ Le site peut être ajouté à l'écran d'accueil comme une application (`src/app
 - **Montée de niveau** : le MJ clique « Accorder le niveau N » dans l'outil. Le bouton « Monter de niveau » s'allume
   sur le tableau de bord du joueur et ouvre un assistant (nouvelles capacités, PV moyens ou dé lancé par le serveur,
   choix, récapitulatif). Niveau maximum : 4 (`MAX_LEVEL` dans `types.ts`).
+- **Un niveau pour tout le groupe** : bouton du MJ en tête de chaque groupe, qui accorde le niveau suivant à tous les
+  personnages vivants (sauf ceux qui ont déjà une montée en attente ou sont au niveau maximum).
 - **Préparer à l'avance** : avant que le niveau soit accordé, le joueur peut faire ses choix (carte « Prochain niveau »).
   Ils sont vérifiés par le serveur et gardés dans `characters[].prepared` ; le jour venu, l'assistant s'ouvre
   directement sur le récapitulatif. Le MJ voit « Choix du niv. N prêts » dans sa liste.
@@ -144,6 +146,32 @@ Le site peut être ajouté à l'écran d'accueil comme une application (`src/app
   au-delà du 1er sont recalculés à la moyenne (le coffre permet de relancer). La proposition (`proposals` dans db.json)
   est une copie figée : le MJ l'examine dans l'outil Fiche, l'accepte (elle devient la fiche du joueur, au niveau
   proposé) ou la refuse avec un mot d'explication.
+
+## Chronique (`src/tools/chronicle/`)
+
+- Outil de groupe (comme le planning) : une frise des séances par groupe, la plus récente en haut, numérotées dans
+  l'ordre chronologique. Les joueurs lisent, le MJ écrit.
+- Chaque séance : date (proposée d'après la dernière session confirmée du planning), titre, résumé et moments
+  marquants (combat de boss, objet rare, montée de niveau, mort, exploit, quête, rencontre, lieu, rebondissement,
+  réplique culte… liste dans `meta.ts`), chacun relié aux personnages concernés.
+- Les montées de niveau et les morts du groupe sont repérées automatiquement (`events.ts`) tant qu'elles ne sont
+  racontées dans aucune séance : le MJ les ajoute d'un clic. Une séance peut rester en brouillon (invisible des joueurs).
+- Les quêtes lancées ou terminées à une séance (outil « Quêtes ») apparaissent dans sa carte de la frise.
+- Tableau de bord : « Dernière séance » (et, pour le MJ, le nombre d'événements à raconter).
+
+## Quêtes (`src/tools/quests/`)
+
+- Outil de groupe : le MJ écrit ses quêtes (titre, commanditaire, récompense, description, personnages concernés) et
+  choisit pour chacune « cachée » (lui seul la voit) ou « visible ». Données : `quests` dans db.json.
+- Statuts : à venir → en cours → accomplie / échouée (on peut rouvrir ou remettre à venir). Lancer une quête demande la
+  séance où elle commence et la rend visible : elle apparaît alors dans la frise de la chronique (« Nouvelle quête »).
+  Sa conclusion apparaît à la séance choisie. Une quête recachée disparaît de ce que voient les joueurs.
+- Joueurs : leur journal (en cours, « rumeurs et pistes » visibles, terminées). Tableau de bord : « Quêtes en cours ».
+- Résumé rapide (`QuestSummary.tsx`) : un clic sur une quête de la frise, sur le titre d'une carte du journal ou sur une
+  quête du tableau de bord ouvre sur place une fenêtre avec statut, commanditaire, récompense, description, personnages
+  et séances de début et de fin. Le lien `/outils/quetes?quete=<id>` ouvre aussi le journal sur ce résumé.
+- Un outil peut proposer plusieurs panneaux sur le tableau de bord grâce à `extraWidgets` dans le registre.
+  Données : `chronicle` dans db.json.
 
 ## Cimetière (`src/tools/cemetery/`)
 

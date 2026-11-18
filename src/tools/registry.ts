@@ -16,6 +16,12 @@ import { VAULT_TOOL_ID } from "./vault/meta";
 import Cemetery from "./cemetery/Cemetery";
 import CemeteryWidget from "./cemetery/CemeteryWidget";
 import { CEMETERY_TOOL_ID } from "./cemetery/meta";
+import Chronicle from "./chronicle/Chronicle";
+import ChronicleWidget from "./chronicle/ChronicleWidget";
+import QuestsTool from "./quests/QuestsTool";
+import QuestsWidget from "./quests/QuestsWidget";
+import { QUESTS_TOOL_ID } from "./quests/meta";
+import { CHRONICLE_TOOL_ID } from "./chronicle/meta";
 import PlanningWidget from "./planning/PlanningWidget";
 import { PLANNING_TOOL_ID } from "./planning/types";
 import { TOOL_META as HOMUNCULUS_META } from "./homunculus-creator/meta";
@@ -46,6 +52,8 @@ export type ToolWidget = {
   wide?: boolean;
   /** Ordre d'affichage, du plus petit au plus grand (défaut 100). */
   order?: number;
+  /** Icône du panneau (par défaut : celle de l'outil). */
+  icon?: string;
 };
 
 export type ToolDefinition = {
@@ -58,6 +66,8 @@ export type ToolDefinition = {
   wide?: boolean;
   /** Panneau facultatif pour le tableau de bord. */
   widget?: ToolWidget;
+  /** Panneaux supplémentaires (ex. la chronique : « Dernière séance » et « Quêtes en cours »). */
+  extraWidgets?: ToolWidget[];
   /** Rubrique de la navigation. */
   section: NavSection;
   /** Libellé court (barre d'onglets du téléphone). */
@@ -124,6 +134,26 @@ export const TOOLS: ToolDefinition[] = [
     section: "creation",
     short: "Coffre",
     wide: true,
+  },
+  {
+    id: CHRONICLE_TOOL_ID, // "chronique"
+    name: "Chronique",
+    description: "La frise des séances : résumés et moments marquants de ta campagne.",
+    icon: "📖",
+    component: Chronicle,
+    section: "campagne",
+    short: "Chronique",
+    widget: { component: ChronicleWidget, title: "Dernière séance", order: 15 },
+  },
+  {
+    id: QUESTS_TOOL_ID, // "quetes"
+    name: "Quêtes",
+    description: "Le journal de quêtes du groupe : en cours, pistes et quêtes terminées.",
+    icon: "📜",
+    component: QuestsTool,
+    section: "campagne",
+    short: "Quêtes",
+    widget: { component: QuestsWidget, title: "Quêtes en cours", order: 16 },
   },
   {
     id: CEMETERY_TOOL_ID, // "cimetiere"

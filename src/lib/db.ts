@@ -125,6 +125,53 @@ export type Grave = {
   diedAt: string;
 };
 
+/** Moment marquant d'une séance (chronique). `characters` : noms figés au moment de l'écriture. */
+export type ChronicleMoment = {
+  id: string;
+  kind: string;
+  text: string;
+  characters: { id: string; name: string }[];
+  /** Événement détecté automatiquement (ex. "levelup:<idFiche>:3", "death:<idFiche>"), pour ne pas le proposer deux fois. */
+  source?: string;
+};
+/** Une séance racontée dans la chronique d'un groupe. */
+export type ChronicleSession = {
+  id: string;
+  groupId: string;
+  /** "AAAA-MM-JJ" */
+  date: string;
+  title: string;
+  summary: string;
+  moments: ChronicleMoment[];
+  /** Brouillon : visible du MJ seulement. */
+  draft: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Quête d'un groupe, écrite par le MJ (outil « Quêtes »).
+ * Cachée : visible du MJ seulement. Une quête lancée (en cours) apparaît dans la frise, à la séance `startSessionId` ;
+ * sa conclusion (accomplie / échouée) à la séance `endSessionId`.
+ */
+export type Quest = {
+  id: string;
+  groupId: string;
+  title: string;
+  description: string;
+  /** Qui l'a confiée (PNJ, lieu…). */
+  giver: string;
+  reward: string;
+  visible: boolean;
+  status: "todo" | "open" | "done" | "failed";
+  startSessionId: string | null;
+  endSessionId: string | null;
+  /** Personnages concernés (noms figés). */
+  characters: { id: string; name: string }[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 /** Groupe de jeu (une table, une campagne). Les membres sont les joueurs dont `groupIds` contient son id. */
 export type Group = { id: string; name: string; createdAt: string };
 
@@ -139,6 +186,8 @@ export type Db = {
   vault?: StoredCharacter[];
   graves?: Grave[];
   proposals?: Proposal[];
+  chronicle?: ChronicleSession[];
+  quests?: Quest[];
 };
 
 // ---------------------------------------------------------------------------
@@ -293,6 +342,14 @@ export async function getGroups(): Promise<Group[]> {
 
 export async function getProposals(): Promise<Proposal[]> {
   return (await load()).proposals ?? [];
+}
+
+export async function getChronicle(): Promise<ChronicleSession[]> {
+  return (await load()).chronicle ?? [];
+}
+
+export async function getQuests(): Promise<Quest[]> {
+  return (await load()).quests ?? [];
 }
 
 export async function getPolls(): Promise<Poll[]> {

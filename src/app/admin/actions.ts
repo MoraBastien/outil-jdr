@@ -149,6 +149,8 @@ export async function deleteGroup(formData: FormData): Promise<void> {
     db.polls = (db.polls ?? []).filter((p) => p.groupId !== id);
     db.graves = (db.graves ?? []).filter((g) => g.groupId !== id);
     db.proposals = (db.proposals ?? []).filter((p) => p.groupId !== id);
+    db.chronicle = (db.chronicle ?? []).filter((s) => s.groupId !== id);
+    db.quests = (db.quests ?? []).filter((q) => q.groupId !== id);
   });
   back("/admin", { ok: name ? `Groupe « ${name} » supprimé.` : "Groupe introuvable." });
 }

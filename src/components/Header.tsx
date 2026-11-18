@@ -6,7 +6,7 @@ import { NAV_SECTIONS, TOOLS } from "@/tools/registry";
 import AppNav, { type NavGroup, type NavItem } from "./AppNav";
 
 /** Ordre d'affichage des outils (les plus utilisés d'abord, c'est aussi l'ordre de la barre mobile). */
-const PRIORITY = ["personnage", "planning", "cimetiere", "coffre", "homunculus-creator", "des"];
+const PRIORITY = ["personnage", "planning", "chronique", "quetes", "cimetiere", "coffre", "homunculus-creator", "des"];
 const rank = (id: string) => (PRIORITY.includes(id) ? PRIORITY.indexOf(id) : PRIORITY.length);
 
 export default async function Header({ user }: { user: User }) {

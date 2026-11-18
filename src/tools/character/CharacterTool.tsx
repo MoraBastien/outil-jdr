@@ -12,6 +12,7 @@ import {
   createCharacterAction,
   declareDeathAction,
   foundryTodoAction,
+  grantGroupLevelAction,
   prepareLevelUpAction,
   refuseProposalAction,
   deleteCharacterAction,
@@ -390,9 +391,30 @@ function AdminPanel({
 
       {view.groups.length === 0 && <p className="flash flash-error">Aucun groupe de jeu : crée un groupe et ajoutes-y des joueurs dans l&apos;administration.</p>}
 
-      {view.groups.map((g) => (
+      {view.groups.map((g) => {
+        // Personnages qui recevraient un niveau avec le bouton « tout le groupe ».
+        const eligible = g.members.flatMap((m) => {
+          const r = m.entry?.record;
+          return r && r.state.level < MAX_LEVEL && r.grantedLevel <= r.state.level ? [r] : [];
+        });
+        return (
         <section key={g.id} className="stack">
-          <h2 className="subtitle">👥 {g.name}</h2>
+          <div className="cs-row-between">
+            <h2 className="subtitle">👥 {g.name}</h2>
+            {eligible.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-small cs-group-levelup"
+                disabled={busy}
+                onClick={() => {
+                  const names = eligible.map((r) => `• ${r.state.name} → niveau ${r.state.level + 1}`).join("\n");
+                  if (confirm(`Accorder un niveau à tout le groupe « ${g.name} » ?\n\n${names}`)) void run(grantGroupLevelAction(g.id));
+                }}
+              >
+                ✦ Un niveau pour tout le groupe ({eligible.length})
+              </button>
+            )}
+          </div>
           {g.members.length === 0 ? (
             <p className="muted small">Aucun joueur dans ce groupe.</p>
           ) : (
@@ -410,7 +432,8 @@ function AdminPanel({
             </ul>
           )}
         </section>
-      ))}
+        );
+      })}
 
       {view.archived.length > 0 && (
         <details className="pl-archive">

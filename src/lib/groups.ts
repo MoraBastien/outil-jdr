@@ -3,7 +3,7 @@
 // à tout joueur membre d'au moins un groupe (et au MJ), sans case à cocher.
 import type { Db, Group, User } from "./db";
 
-export const GROUP_TOOL_IDS = ["planning", "personnage", "cimetiere"];
+export const GROUP_TOOL_IDS = ["planning", "personnage", "chronique", "quetes", "cimetiere"];
 export const isGroupTool = (toolId: string) => GROUP_TOOL_IDS.includes(toolId);
 
 /** Outils ouverts à tous les joueurs, sans case à cocher (le coffre à personnages). */

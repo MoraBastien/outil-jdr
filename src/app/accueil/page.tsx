@@ -17,8 +17,8 @@ export default async function HomePage() {
   const tools = TOOLS.filter((t) => canUseTool(user, t.id));
   // Tableau de bord : un panneau par outil qui en propose un, dans l'ordre demandé.
   const widgets = tools
-    .filter((t) => t.widget)
-    .sort((a, b) => (a.widget!.order ?? 100) - (b.widget!.order ?? 100));
+    .flatMap((t) => [...(t.widget ? [t.widget] : []), ...(t.extraWidgets ?? [])].map((w, i) => ({ t, w, key: i === 0 ? t.id : `${t.id}-${i}` })))
+    .sort((a, b) => (a.w.order ?? 100) - (b.w.order ?? 100));
 
   const { notes } = user.profile;
   // L'Écho (Atelier de Rigel) s'affiche dans le profil des joueurs qui ont l'outil.
@@ -46,10 +46,10 @@ export default async function HomePage() {
           </div>
         ) : (
           <div className="dashboard">
-            {widgets.map((t) => {
-              const W = t.widget!.component;
+            {widgets.map(({ t, w, key }) => {
+              const W = w.component;
               return (
-                <Widget key={t.id} title={(isAdmin && t.widget!.adminTitle) || t.widget!.title || t.name} icon={t.icon} href={`/outils/${t.id}`} wide={t.widget!.wide} transitionName={`tool-${t.id}`}>
+                <Widget key={key} title={(isAdmin && w.adminTitle) || w.title || t.name} icon={w.icon ?? t.icon} href={`/outils/${t.id}`} wide={w.wide} transitionName={`tool-${key}`}>
                   <W user={user} />
                 </Widget>
               );
