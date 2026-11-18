@@ -1,9 +1,9 @@
-// Stockage très simple : un seul document JSON, dans Upstash Redis (Vercel) ou dans data/db.json (local).
+// Stockage très simple : un seul document JSON, dans Redis (Vercel) ou dans data/db.json (local).
 // Suffisant pour une table de JDR.
 import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID, randomInt } from "crypto";
-import { Redis } from "@upstash/redis";
+import { createClient } from "redis";
 
 export type Role = "admin" | "player";
 
@@ -66,23 +66,33 @@ export type Db = { users: User[]; homunculi?: StoredHomunculus[]; diceLog?: Dice
 
 // ---------------------------------------------------------------------------
 // Stockage
-// - Si les variables Upstash Redis sont définies (Vercel) : tout le document est
-//   stocké sous une seule clé Redis.
+// - Si une URL Redis est définie (Vercel) : tout le document est stocké sous une seule clé Redis.
 // - Sinon (en local, VPS) : fichier data/db.json, comme avant.
 // ---------------------------------------------------------------------------
 
 const DB_PATH = path.join(process.cwd(), "data", "db.json");
 const REDIS_KEY = "jdr:db";
 
-// Noms créés par l'intégration Upstash de Vercel (KV_*) ou par Upstash directement (UPSTASH_*).
-const REDIS_URL = process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
+// KV_REDIS_URL : nom créé par Vercel avec le préfixe « KV ». REDIS_URL : nom par défaut.
+const REDIS_URL = process.env.KV_REDIS_URL ?? process.env.REDIS_URL;
 
-// On récupère le JSON brut (pas de désérialisation auto) pour pouvoir le comparer tel quel.
-const redis =
-  REDIS_URL && REDIS_TOKEN
-    ? new Redis({ url: REDIS_URL, token: REDIS_TOKEN, automaticDeserialization: false })
-    : null;
+type RedisClient = ReturnType<typeof createClient>;
+
+// Une seule connexion, réutilisée entre les requêtes tant que l'instance reste active.
+const globalForRedis = globalThis as unknown as { jdrRedis?: Promise<RedisClient> };
+
+function getRedis(): Promise<RedisClient> | null {
+  if (!REDIS_URL) return null;
+  if (!globalForRedis.jdrRedis) {
+    const client = createClient({ url: REDIS_URL });
+    client.on("error", (e) => console.error("Redis :", e));
+    globalForRedis.jdrRedis = client.connect().catch((e) => {
+      globalForRedis.jdrRedis = undefined; // on retentera à la prochaine requête
+      throw e;
+    }) as Promise<RedisClient>;
+  }
+  return globalForRedis.jdrRedis;
+}
 
 function initialDb(): Db {
   return {
@@ -103,12 +113,14 @@ function initialDb(): Db {
 type Snapshot = { db: Db; raw: string | null };
 
 async function readSnapshot(): Promise<Snapshot> {
-  if (redis) {
-    let raw = await redis.get<string>(REDIS_KEY);
+  const pending = getRedis();
+  if (pending) {
+    const redis = await pending;
+    let raw = await redis.get(REDIS_KEY);
     if (raw === null) {
       // Premier lancement : on crée la base avec le compte MJ (NX = seulement si absente).
-      await redis.set(REDIS_KEY, JSON.stringify(initialDb(), null, 2), { nx: true });
-      raw = await redis.get<string>(REDIS_KEY);
+      await redis.set(REDIS_KEY, JSON.stringify(initialDb(), null, 2), { condition: "NX" });
+      raw = await redis.get(REDIS_KEY);
     }
     return { db: JSON.parse(raw as string) as Db, raw };
   }
@@ -150,7 +162,8 @@ let queue: Promise<unknown> = Promise.resolve();
 
 export function updateDb<T>(fn: (db: Db) => T | Promise<T>): Promise<T> {
   const run = queue.then(async () => {
-    if (!redis) {
+    const pending = getRedis();
+    if (!pending) {
       const { db } = await readSnapshot();
       const result = await fn(db);
       await writeFile(db);
@@ -159,10 +172,14 @@ export function updateDb<T>(fn: (db: Db) => T | Promise<T>): Promise<T> {
 
     // Sur Vercel, plusieurs instances tournent en parallèle : si la base a changé entre la
     // lecture et l'écriture, on relit et on rejoue la modification.
+    const redis = await pending;
     for (let attempt = 0; attempt < 10; attempt++) {
       const { db, raw } = await readSnapshot();
       const result = await fn(db);
-      const written = await redis.eval(COMPARE_AND_SET, [REDIS_KEY], [raw as string, JSON.stringify(db, null, 2)]);
+      const written = await redis.eval(COMPARE_AND_SET, {
+        keys: [REDIS_KEY],
+        arguments: [raw as string, JSON.stringify(db, null, 2)],
+      });
       if (Number(written) === 1) return result;
     }
     throw new Error("Base de données trop sollicitée, réessaie dans un instant.");
