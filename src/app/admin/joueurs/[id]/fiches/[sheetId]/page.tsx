@@ -22,7 +22,7 @@ export default async function SheetPage({ params }: { params: Promise<{ id: stri
     <>
       <Header user={admin} />
       <main className="page page-wide stack">
-        <nav className="breadcrumbs muted">
+        <nav className="breadcrumbs" aria-label="Fil d'Ariane">
           <Link href="/admin">Administration</Link> <span aria-hidden="true">/</span>{" "}
           <Link href={`/admin/joueurs/${player.id}`}>{player.name}</Link> <span aria-hidden="true">/</span>{" "}
           <span>{state.nom.trim() || "Sans nom"}</span>

@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { getUserById, getHomunculi } from "@/lib/db";
 import { TOOLS } from "@/tools/registry";
 import Header from "@/components/Header";
+import Flash from "@/components/Flash";
 import { clampEcho, MAX_ECHO } from "@/tools/homunculus/echo";
 import { TOOL_META as HOMUNCULUS_META } from "@/tools/homunculus-creator/meta";
 import { deletePlayer, deleteHomunculus } from "../../actions";
@@ -38,15 +39,15 @@ export default async function PlayerPage({
     <>
       <Header user={admin} />
       <main className="page stack-lg">
-        <div className="stack">
-          <nav className="breadcrumbs muted">
-            <Link href="/admin">Administration</Link> <span aria-hidden="true">/</span> <span>{player.name}</span>
+        <div className="page-head">
+          <nav className="breadcrumbs" aria-label="Fil d'Ariane">
+            <Link href="/admin">Administration</Link> <span aria-hidden="true">/</span> <span aria-current="page">{player.name}</span>
           </nav>
           <h1 className="title">{player.name}</h1>
         </div>
 
-        {error && <p className="flash flash-error">{error}</p>}
-        {ok && <p className="flash flash-ok">{ok}</p>}
+        {/* Clé unique à chaque rendu serveur : le message réapparaît même s'il est identique au précédent. */}
+        <Flash key={Date.now()} ok={ok} error={error} />
 
         <PlayerEditor
           // Réinitialise l'état local (dont « non enregistré ») après chaque enregistrement.

@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/auth";
 import { getUsers, getAllHomunculi } from "@/lib/db";
 import { TOOLS } from "@/tools/registry";
 import Header from "@/components/Header";
+import Flash from "@/components/Flash";
 import { clampEcho } from "@/tools/homunculus/echo";
 import { TOOL_META as HOMUNCULUS_META } from "@/tools/homunculus-creator/meta";
 import { createPlayer } from "./actions";
@@ -43,10 +44,14 @@ export default async function AdminPage({
     <>
       <Header user={admin} />
       <main className="page stack-lg">
-        <h1 className="title">Administration</h1>
+        <div className="page-head">
+          <p className="eyebrow">Administration</p>
+          <h1 className="title">Joueurs &amp; outils</h1>
+          <p className="muted">Crée les joueurs, donne-leur un code et choisis les outils auxquels ils ont accès.</p>
+        </div>
 
-        {error && <p className="flash flash-error">{error}</p>}
-        {ok && <p className="flash flash-ok">{ok}</p>}
+        {/* Clé unique à chaque rendu serveur : le message réapparaît même s'il est identique au précédent. */}
+        <Flash key={Date.now()} ok={ok} error={error} />
 
         <section className="stat-grid" aria-label="Résumé">
           {stats.map((s) => (
@@ -58,7 +63,10 @@ export default async function AdminPage({
         </section>
 
         <section className="card stack">
-          <h2 className="subtitle">Nouveau joueur</h2>
+          <div className="section-head">
+            <h2 className="subtitle">Nouveau joueur</h2>
+            <span className="muted small">Laisse le code vide pour en générer un.</span>
+          </div>
           <form action={createPlayer} className="inline-form">
             <input name="name" className="input" placeholder="Nom du joueur / personnage" required aria-label="Nom" />
             <input
@@ -68,7 +76,7 @@ export default async function AdminPage({
               autoComplete="off"
               aria-label="Code d'accès"
             />
-            <button className="btn">Créer</button>
+            <button className="btn">+ Créer</button>
           </form>
         </section>
 

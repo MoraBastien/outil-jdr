@@ -248,7 +248,7 @@ function PollCard({ poll, data, now, h }: { poll: Poll; data: PlanningData; now:
   const statusLabel = poll.status === "open" ? "Ouvert" : poll.status === "confirmed" ? "Confirmé" : "Clos";
 
   return (
-    <article className={`card stack pl-poll pl-${poll.status}`}>
+    <article className={`card stack pl-poll pl-is-${poll.status}`}>
       <header className="section-head">
         <h3 className="pl-title">{poll.title}</h3>
         <span className={`chip ${poll.status === "confirmed" ? "chip-ok" : poll.status === "open" ? "chip-accent" : ""}`}>{statusLabel}</span>

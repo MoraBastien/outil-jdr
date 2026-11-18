@@ -57,7 +57,7 @@ export default function PlayerList({ players }: { players: PlayerRow[] }) {
       {players.length > 4 && (
         <input
           type="search"
-          className="input"
+          className="input input-search"
           placeholder="Rechercher un joueur ou un code…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -68,11 +68,16 @@ export default function PlayerList({ players }: { players: PlayerRow[] }) {
       <ul className="player-list">
         {shown.map((p) => (
           <li key={p.id} className="card player-row">
-            <div className="player-main">
-              <Link href={`/admin/joueurs/${p.id}`} className="player-name">
-                {p.name}
-              </Link>
-              <CopyCode code={p.code} />
+            <div className="player-ident">
+              <span className="avatar avatar-lg" aria-hidden="true">
+                {p.name.trim().charAt(0).toUpperCase() || "?"}
+              </span>
+              <div className="player-main">
+                <Link href={`/admin/joueurs/${p.id}`} className="player-name">
+                  {p.name}
+                </Link>
+                <CopyCode code={p.code} />
+              </div>
             </div>
 
             <div className="chips">

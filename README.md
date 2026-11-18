@@ -31,6 +31,26 @@ directement dans ce fichier. **Sauvegarde ce fichier** : il contient tous les jo
 
 Il apparaît automatiquement dans l'admin pour être attribué.
 
+### Widget sur le tableau de bord
+
+La page d'accueil (`/accueil`) est un tableau de bord : chaque outil peut y afficher un panneau. Il suffit
+d'ajouter `widget` à son entrée dans `TOOLS` :
+
+```ts
+widget: { component: MonWidget, title: "Titre du panneau", wide: false, order: 50 }
+```
+
+- `component` : composant **serveur** (il peut être `async` et lire la base) qui reçoit `{ user }`. Il ne s'affiche
+  que si l'utilisateur a accès à l'outil. Le cadre (titre, icône, lien « Ouvrir → »), le chargement et les erreurs
+  sont gérés par `src/components/Widget.tsx` : un widget qui plante n'empêche pas les autres de s'afficher.
+- `user` contient le **code d'accès** : ne jamais le passer tel quel à un composant client. Pour une partie
+  interactive, le widget serveur rend un composant client en lui passant seulement ce dont il a besoin
+  (voir `src/tools/dice/DiceWidget.tsx` → `QuickRoll.tsx`).
+- `wide` : le panneau prend toute la largeur. `order` : position (plus petit = plus haut, 100 par défaut).
+
+Widgets existants : Planning (`order` 10, prochaine session + sondages), Atelier de Rigel (20, fiches),
+Lanceur de dés (30, jet rapide).
+
 Pour un outil existant en HTML/JS autonome : le mettre dans `public/outils-statiques/<id>/` et créer un composant
 qui l'affiche dans une `<iframe src="/outils-statiques/<id>/index.html">`. Attention : les fichiers de `public/` sont accessibles sans
 connexion. Si l'outil doit rester privé, mieux vaut le porter en composant React.

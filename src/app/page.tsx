@@ -9,8 +9,13 @@ export default async function LoginPage() {
   return (
     <main className="login">
       <div className="card login-card">
-        <h1 className="title">Outils de la table</h1>
-        <p className="muted">Entre le code que ton MJ t&apos;a donné.</p>
+        <span className="login-mark" aria-hidden="true">
+          ✦
+        </span>
+        <div className="stack-xs">
+          <h1 className="title">Outils de la table</h1>
+          <p className="muted">Entre le code que ton MJ t&apos;a donné.</p>
+        </div>
         <LoginForm />
       </div>
     </main>

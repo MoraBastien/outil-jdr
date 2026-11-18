@@ -13,15 +13,20 @@ export default async function ToolPage({ params }: { params: Promise<{ toolId: s
 
   const Tool = tool.component;
   const player = { name: user.name, isAdmin: user.role === "admin", echo: user.echo, profile: user.profile };
+  const crumbs = (
+    <nav className="breadcrumbs" aria-label="Fil d'Ariane">
+      <Link href="/accueil">Accueil</Link>
+      <span aria-hidden="true">/</span>
+      <span aria-current="page">{tool.name}</span>
+    </nav>
+  );
 
   if (tool.wide) {
     return (
       <>
         <Header user={user} />
         <main className="page page-wide stack">
-          <Link href="/accueil" className="muted">
-            ← Retour
-          </Link>
+          {crumbs}
           <Tool player={player} />
         </main>
       </>
@@ -32,15 +37,17 @@ export default async function ToolPage({ params }: { params: Promise<{ toolId: s
     <>
       <Header user={user} />
       <main className="page stack-lg">
-        <div className="stack">
-          <Link href="/accueil" className="muted">
-            ← Retour
-          </Link>
+        <div className="page-head">
+          {crumbs}
           <h1 className="title">
-            {tool.icon} {tool.name}
+            <span className="title-icon" aria-hidden="true">
+              {tool.icon}
+            </span>{" "}
+            {tool.name}
           </h1>
+          <p className="muted">{tool.description}</p>
         </div>
-        <section className="card">
+        <section className="card card-lg">
           <Tool player={player} />
         </section>
       </main>
