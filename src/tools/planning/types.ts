@@ -7,10 +7,18 @@ export const PLANNING_TOOL_ID = "planning";
 
 export type SlotInput = { date: string; start: string; end: string };
 
+export type PlanningGroup = {
+  id: string;
+  name: string;
+  /** Membres du groupe : ce sont eux qui répondent aux sondages du groupe. */
+  participants: { id: string; name: string }[];
+};
+
 export type PlanningData = {
   me: { id: string; isAdmin: boolean };
-  /** Joueurs ayant accès à l'outil (ceux qui peuvent répondre). */
-  participants: { id: string; name: string }[];
+  /** Groupes visibles : tous pour le MJ, ceux du joueur sinon. */
+  groups: PlanningGroup[];
+  /** Sondages de ces groupes (le MJ voit aussi les anciens sondages sans groupe). */
   polls: Poll[];
 };
 

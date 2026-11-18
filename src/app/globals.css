@@ -1241,3 +1241,52 @@ li.half > .cs-mark, .cs-mark.half { background: linear-gradient(90deg, var(--acc
   .cs-hp { order: -1; grid-column: 1 / -1; }
 }
 .cs-hp-quick { flex-wrap: wrap; justify-content: center; }
+
+/* ==========================================================================
+   Groupes de jeu
+   ========================================================================== */
+.group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+.group-card { display: flex; flex-direction: column; gap: 12px; }
+.group-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.group-name { margin: 0; font: 500 1.2rem var(--font-title); }
+.group-members { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.group-members li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--radius-sm); background: var(--surface-2); animation: slide-in 0.35s var(--ease) both; }
+.group-member-name { flex: 1; }
+.group-members .icon-btn { width: 28px; height: 28px; }
+.group-foot { display: flex; gap: 16px; padding-top: 8px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.group-more summary { cursor: pointer; font-size: 0.86rem; color: var(--muted); list-style: none; }
+.group-more summary::-webkit-details-marker { display: none; }
+.group-more[open] { flex-basis: 100%; }
+.group-more form { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.group-more .inline-form { flex-direction: row; }
+.group-new { border-style: dashed; background: transparent; }
+.group-check {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; cursor: pointer; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border); transition: border-color 0.2s, background-color 0.2s;
+}
+.group-check input { accent-color: var(--accent); }
+.group-check.on { border-color: var(--ok); background: var(--ok-soft); }
+.tool-toggle.auto { cursor: default; opacity: 0.85; }
+.tool-toggle.auto:not(.on) { opacity: 0.5; }
+
+/* Planning : un bloc par groupe */
+.pl-group { padding: 20px; border-radius: 18px; border: 1px solid var(--border); background: rgba(23, 20, 31, 0.5); }
+.pl-group-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.pl-section-title { margin: 0; font: 500 1.1rem var(--font-title); color: var(--accent); cursor: default; }
+summary.pl-section-title { cursor: pointer; }
+.pw-group { color: var(--accent); }
+
+/* Fiche : onglets de groupe */
+.cs-group-tabs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.cs-group-tab {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 16px; cursor: pointer;
+  font: inherit; color: var(--text); text-align: left; white-space: nowrap;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  transition: border-color 0.2s, background-color 0.2s, transform 0.2s var(--ease);
+}
+.cs-group-tab:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.cs-group-tab.on { border-color: var(--accent); background: linear-gradient(135deg, rgba(226, 180, 95, 0.14), transparent), var(--surface); }
+.cs-group-tab-name { font: 500 1.05rem var(--font-title); }
+.cs-tab-glow { position: absolute; top: 8px; right: 8px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent-strong); animation: lu-glow 1.4s ease-in-out infinite alternate; }
+.cs-group-panel { animation: rise 0.4s var(--ease) both; }
+.cs-widget-groups { display: flex; flex-direction: column; gap: 16px; }

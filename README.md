@@ -70,8 +70,21 @@ Option `wide: true` dans le registre : page pleine largeur, sans carte ni titre 
   Le joueur ne peut pas le changer (vérifié aussi côté serveur). Le MJ, lui, choisit librement.
 - **Revue MJ** : la page du joueur liste ses fiches (étapes, relances) ; « Voir » les affiche en lecture seule.
 
+## Groupes de jeu
+
+- Un groupe = une table / une campagne (`groups` dans db.json). Un joueur peut être dans plusieurs groupes
+  (`groupIds` sur le joueur).
+- Le MJ crée, renomme et supprime les groupes, et ajoute ou retire des joueurs, sur `/admin` (ou en cochant les groupes
+  sur la page du joueur).
+- **Planning** et **fiche de personnage** sont accordés automatiquement à tout joueur membre d'au moins un groupe ; un
+  joueur sans groupe n'y a pas accès (`src/lib/groups.ts`, `canUseTool`). Les autres outils se cochent par joueur.
+- Supprimer un groupe supprime ses sondages ; les fiches de personnage sont conservées (« Fiches archivées » côté MJ).
+  Une fiche créée avant les groupes est rattachée au premier groupe que le joueur rejoint.
+
 ## Planning des sessions (`src/tools/planning/`)
 
+- Les sondages sont **par groupe** : seuls les membres du groupe les voient et y répondent. Les anciens sondages sans
+  groupe ne sont visibles que du MJ, qui peut les rattacher à un groupe.
 - Le MJ crée un sondage (titre, note, créneaux date + heure de début + heure de fin facultative), puis retient
   un créneau, en ajoute ou en retire, archive ou supprime.
 - Les joueurs ayant l'outil répondent Oui / Peut-être / Non par créneau et voient les réponses des autres.
@@ -80,6 +93,7 @@ Option `wide: true` dans le registre : page pleine largeur, sans carte ni titre 
 
 ## Fiche de personnage D&D 5.5 (`src/tools/character/`)
 
+- **Une fiche par joueur et par groupe** : un joueur dans deux groupes a deux personnages, chacun avec son niveau.
 - **Joueur** : crée son personnage avec un assistant (classe, espèce, historique, caractéristiques, compétences,
   identité), puis utilise sa fiche : PV, dés de vie, jets contre la mort, emplacements de sorts, armes, équipement,
   notes. Chaque notion a une bulle d'aide « ? ».

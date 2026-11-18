@@ -9,6 +9,7 @@ import {
   removeSlotAction,
   confirmSlotAction,
   setPollClosedAction,
+  setPollGroupAction,
   deletePollAction,
   answerAction,
 } from "./actions";
@@ -19,6 +20,7 @@ import {
   slotKey,
   sortSlots,
   type PlanningData,
+  type PlanningGroup,
   type PlanningResult,
   type Poll,
   type PollAnswer,
@@ -97,7 +99,15 @@ function SlotFields({ value, onChange }: { value: SlotInput; onChange: (v: SlotI
   );
 }
 
-function NewPollForm({ busy, onCreate }: { busy: boolean; onCreate: (input: { title: string; note: string; slots: SlotInput[] }) => Promise<boolean> }) {
+function NewPollForm({
+  busy,
+  groupName,
+  onCreate,
+}: {
+  busy: boolean;
+  groupName: string;
+  onCreate: (input: { title: string; note: string; slots: SlotInput[] }) => Promise<boolean>;
+}) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
@@ -112,9 +122,11 @@ function NewPollForm({ busy, onCreate }: { busy: boolean; onCreate: (input: { ti
 
   if (!open) {
     return (
-      <button type="button" className="btn" onClick={() => setOpen(true)}>
-        + Proposer des dates
-      </button>
+      <div>
+        <button type="button" className="btn btn-small" onClick={() => setOpen(true)}>
+          + Proposer des dates
+        </button>
+      </div>
     );
   }
 
@@ -133,7 +145,7 @@ function NewPollForm({ busy, onCreate }: { busy: boolean; onCreate: (input: { ti
         }
       }}
     >
-      <h2 className="subtitle">Nouveau sondage</h2>
+      <h2 className="subtitle">Nouveau sondage · {groupName}</h2>
       <label className="field">
         <span className="label">Titre</span>
         <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. One-shot « La chute de Rigel »" required maxLength={120} />
@@ -222,7 +234,9 @@ type Handlers = {
 };
 
 function PollCard({ poll, data, now, h }: { poll: Poll; data: PlanningData; now: string; h: Handlers }) {
-  const { me, participants } = data;
+  const { me } = data;
+  // Ceux qui répondent : les membres du groupe du sondage.
+  const participants = data.groups.find((g) => g.id === poll.groupId)?.participants ?? [];
   const isAdmin = me.isAdmin;
   const isParticipant = participants.some((p) => p.id === me.id);
   const slots = sortSlots(poll.slots);
@@ -365,6 +379,23 @@ function PollCard({ poll, data, now, h }: { poll: Poll; data: PlanningData; now:
         })}
       </ul>
 
+      {isAdmin && !poll.groupId && data.groups.length > 0 && (
+        <div className="pl-admin">
+          <label className="pl-f">
+            <span className="label">Sondage créé avant les groupes : à quel groupe le rattacher ?</span>
+            <select className="input" defaultValue="" disabled={h.busy} onChange={(e) => e.target.value && void h.run(setPollGroupAction(poll.id, e.target.value))}>
+              <option value="" disabled>
+                Choisir un groupe…
+              </option>
+              {data.groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
       {isAdmin && (
         <footer className="pl-admin">
           {poll.status !== "closed" && <AddSlotForm busy={h.busy} onAdd={(s) => h.run(addSlotAction(poll.id, s))} />}
@@ -448,24 +479,18 @@ export default function Planning({ player }: { player: ToolPlayer }) {
   }
 
   const h: Handlers = { busy, answer, run };
-  const firstSlot = (p: Poll) => sortSlots(p.slots)[0];
-  const confirmedKey = (p: Poll) => {
-    const s = p.slots.find((x) => x.id === p.confirmedSlotId);
-    return s ? slotKey(s) : "";
-  };
-  const upcomingConfirmed = data.polls
-    .filter((p) => p.status === "confirmed")
-    .sort((a, b) => confirmedKey(a).localeCompare(confirmedKey(b)));
-  const open = data.polls
-    .filter((p) => p.status === "open")
-    .sort((a, b) => (firstSlot(a) ? slotKey(firstSlot(a)) : "").localeCompare(firstSlot(b) ? slotKey(firstSlot(b)) : ""));
-  const closed = data.polls.filter((p) => p.status === "closed").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const legacy = data.polls.filter((p) => !p.groupId);
+  const multi = data.groups.length > 1;
 
   return (
     <div className="stack-lg pl-root">
-      {!data.me.isAdmin && <p className="muted">Salut {player.name}, indique quand tu es disponible.</p>}
-      {data.me.isAdmin && data.participants.length === 0 && (
-        <p className="flash flash-error">Aucun joueur n&apos;a accès au planning : autorise l&apos;outil sur leur page dans l&apos;administration.</p>
+      {!data.me.isAdmin && (
+        <p className="muted">
+          Salut {player.name}, indique quand tu es disponible{multi ? " pour chacun de tes groupes" : ""}.
+        </p>
+      )}
+      {data.me.isAdmin && data.groups.length === 0 && (
+        <p className="flash flash-error">Aucun groupe de jeu : crée un groupe et ajoutes-y des joueurs dans l&apos;administration.</p>
       )}
       {error && (
         <p className="flash flash-error" role="alert">
@@ -473,29 +498,81 @@ export default function Planning({ player }: { player: ToolPlayer }) {
         </p>
       )}
 
-      {data.me.isAdmin && <NewPollForm busy={busy} onCreate={(input) => run(createPollAction(input))} />}
+      {data.groups.map((g) => (
+        <GroupSection key={g.id} group={g} data={data} now={now} h={h} showHead={multi || data.me.isAdmin} />
+      ))}
 
-      {upcomingConfirmed.length > 0 && (
-        <section className="stack">
-          <h2 className="subtitle">Sessions confirmées</h2>
-          {upcomingConfirmed.map((p) => (
+      {data.me.isAdmin && legacy.length > 0 && (
+        <section className="stack pl-group">
+          <header className="pl-group-head">
+            <h2 className="subtitle">Anciens sondages sans groupe</h2>
+          </header>
+          {legacy.map((p) => (
             <PollCard key={p.id} poll={p} data={data} now={now} h={h} />
           ))}
         </section>
       )}
+    </div>
+  );
+}
 
-      <section className="stack">
-        <h2 className="subtitle">Sondages en cours</h2>
+/* ---------- Un groupe ---------- */
+
+function GroupSection({ group, data, now, h, showHead }: { group: PlanningGroup; data: PlanningData; now: string; h: Handlers; showHead: boolean }) {
+  const polls = data.polls.filter((p) => p.groupId === group.id);
+  const firstSlot = (p: Poll) => sortSlots(p.slots)[0];
+  const confirmedKey = (p: Poll) => {
+    const s = p.slots.find((x) => x.id === p.confirmedSlotId);
+    return s ? slotKey(s) : "";
+  };
+  const confirmed = polls.filter((p) => p.status === "confirmed").sort((a, b) => confirmedKey(a).localeCompare(confirmedKey(b)));
+  const open = polls
+    .filter((p) => p.status === "open")
+    .sort((a, b) => (firstSlot(a) ? slotKey(firstSlot(a)) : "").localeCompare(firstSlot(b) ? slotKey(firstSlot(b)) : ""));
+  const closed = polls.filter((p) => p.status === "closed").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  return (
+    <section className="stack pl-group" aria-label={group.name}>
+      {showHead && (
+        <header className="pl-group-head">
+          <h2 className="subtitle">👥 {group.name}</h2>
+          <span className="chips">
+            {group.participants.length === 0 ? (
+              <span className="muted small">Aucun joueur dans ce groupe</span>
+            ) : (
+              group.participants.map((p) => (
+                <span key={p.id} className="chip">
+                  {p.name}
+                </span>
+              ))
+            )}
+          </span>
+        </header>
+      )}
+
+      {data.me.isAdmin && <NewPollForm busy={h.busy} groupName={group.name} onCreate={(input) => h.run(createPollAction({ ...input, groupId: group.id }))} />}
+
+      {confirmed.length > 0 && (
+        <div className="stack">
+          <h3 className="pl-section-title">Sessions confirmées</h3>
+          {confirmed.map((p) => (
+            <PollCard key={p.id} poll={p} data={data} now={now} h={h} />
+          ))}
+        </div>
+      )}
+
+      <div className="stack">
+        <h3 className="pl-section-title">Sondages en cours</h3>
         {open.length === 0 ? (
           <p className="muted">{data.me.isAdmin ? "Aucun sondage en cours." : "Aucune date à choisir pour l'instant. Ton MJ en proposera bientôt."}</p>
         ) : (
           open.map((p) => <PollCard key={p.id} poll={p} data={data} now={now} h={h} />)
         )}
-      </section>
+      </div>
 
       {closed.length > 0 && (
         <details className="pl-archive">
-          <summary className="subtitle">Archives ({closed.length})</summary>
+          <summary className="pl-section-title">Archives ({closed.length})</summary>
           <div className="stack">
             {closed.map((p) => (
               <PollCard key={p.id} poll={p} data={data} now={now} h={h} />
@@ -503,6 +580,6 @@ export default function Planning({ player }: { player: ToolPlayer }) {
           </div>
         </details>
       )}
-    </div>
+    </section>
   );
 }

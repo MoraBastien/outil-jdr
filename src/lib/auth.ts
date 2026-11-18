@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getUserById, type User } from "./db";
 import { getSessionUserId } from "./session";
+import { isGroupTool, userGroupIds } from "./groups";
 
 export async function getCurrentUser(): Promise<User | null> {
   const id = await getSessionUserId();
@@ -22,6 +23,9 @@ export async function requireAdmin(): Promise<User> {
   return user;
 }
 
+/** Outils « de groupe » (planning, fiche) : il faut être dans un groupe. Les autres : cochés par le MJ. */
 export function canUseTool(user: User, toolId: string): boolean {
-  return user.role === "admin" || user.tools.includes(toolId);
+  if (user.role === "admin") return true;
+  if (isGroupTool(toolId)) return userGroupIds(user).length > 0;
+  return user.tools.includes(toolId);
 }

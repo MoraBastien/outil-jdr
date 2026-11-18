@@ -2,7 +2,8 @@
 // Actions serveur du planning des sessions. Chaque action vérifie l'accès et renvoie les données à jour.
 
 import { requireUser, canUseTool } from "@/lib/auth";
-import { getUsers, getPolls, updateDb, randomUUID, type Db, type PollSlot, type User } from "@/lib/db";
+import { getUsers, getPolls, getGroups, updateDb, randomUUID, type Db, type PollSlot, type User } from "@/lib/db";
+import { membersOf, userGroupIds, visibleGroups } from "@/lib/groups";
 import { PLANNING_TOOL_ID, type PlanningData, type PlanningResult, type PollAnswer, type SlotInput } from "./types";
 
 const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -17,13 +18,16 @@ async function requireToolUser(): Promise<User> {
 }
 
 async function view(user: User): Promise<PlanningData> {
-  const users = await getUsers();
-  const participants = users
-    .filter((u) => u.role === "player" && u.tools.includes(PLANNING_TOOL_ID))
-    .map((u) => ({ id: u.id, name: u.name }))
-    .sort((a, b) => a.name.localeCompare(b.name, "fr"));
-  const polls = await getPolls();
-  return { me: { id: user.id, isAdmin: user.role === "admin" }, participants, polls };
+  const [users, allGroups, allPolls] = await Promise.all([getUsers(), getGroups(), getPolls()]);
+  const groups = visibleGroups(user, allGroups).map((g) => ({
+    id: g.id,
+    name: g.name,
+    participants: membersOf(users, g.id).map((u) => ({ id: u.id, name: u.name })),
+  }));
+  const ids = new Set(groups.map((g) => g.id));
+  // Joueur : seulement les sondages de ses groupes. MJ : tout, y compris les anciens sondages sans groupe.
+  const polls = user.role === "admin" ? allPolls.filter((p) => !p.groupId || ids.has(p.groupId)) : allPolls.filter((p) => p.groupId && ids.has(p.groupId));
+  return { me: { id: user.id, isAdmin: user.role === "admin" }, groups, polls };
 }
 
 function cleanSlot(input: unknown): PollSlot | string {
@@ -51,7 +55,8 @@ export async function getPlanningAction(): Promise<PlanningData> {
   return view(await requireToolUser());
 }
 
-export async function createPollAction(input: { title: string; note: string; slots: SlotInput[] }): Promise<PlanningResult> {
+export async function createPollAction(input: { groupId: string; title: string; note: string; slots: SlotInput[] }): Promise<PlanningResult> {
+  const groupId = String(input?.groupId ?? "");
   const title = String(input?.title ?? "").trim().slice(0, 120);
   const note = String(input?.note ?? "").trim().slice(0, 2000);
   const raw = Array.isArray(input?.slots) ? input.slots : [];
@@ -65,8 +70,10 @@ export async function createPollAction(input: { title: string; note: string; slo
     if (!slots.some((x) => x.date === s.date && x.start === s.start)) slots.push(s);
   }
   return adminChange((db, now) => {
+    if (!(db.groups ?? []).some((g) => g.id === groupId)) return "Choisis le groupe concerné.";
     (db.polls ??= []).push({
       id: randomUUID(),
+      groupId,
       title,
       note,
       slots,
@@ -132,6 +139,18 @@ export async function setPollClosedAction(pollId: string, closed: boolean): Prom
   });
 }
 
+/** Rattache un sondage à un groupe (utile pour les sondages créés avant les groupes). */
+export async function setPollGroupAction(pollId: string, groupId: string): Promise<PlanningResult> {
+  return adminChange((db, now) => {
+    const poll = findPoll(db, pollId);
+    if (!poll) return "Sondage introuvable.";
+    if (!(db.groups ?? []).some((g) => g.id === groupId)) return "Groupe introuvable.";
+    poll.groupId = groupId;
+    poll.updatedAt = now;
+    return null;
+  });
+}
+
 export async function deletePollAction(pollId: string): Promise<PlanningResult> {
   return adminChange((db) => {
     db.polls = (db.polls ?? []).filter((p) => p.id !== pollId);
@@ -147,6 +166,7 @@ export async function answerAction(pollId: string, slotId: string, answer: PollA
   const error = await updateDb((db) => {
     const poll = findPoll(db, pollId);
     if (!poll) return "Sondage introuvable.";
+    if (!poll.groupId || !userGroupIds(user).includes(poll.groupId)) return "Ce sondage concerne un groupe dont tu ne fais pas partie.";
     if (poll.status !== "open") return "Ce sondage n'accepte plus de réponses.";
     if (!poll.slots.some((s) => s.id === slotId)) return "Créneau introuvable.";
     const mine = (poll.responses[user.id] ??= {});

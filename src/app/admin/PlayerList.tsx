@@ -9,6 +9,7 @@ export type PlayerRow = {
   code: string;
   echo: number | null;
   tools: { id: string; name: string; icon: string }[];
+  groups: string[];
   sheets: number;
   sheetsComplete: number;
 };
@@ -45,7 +46,7 @@ export default function PlayerList({ players }: { players: PlayerRow[] }) {
   const [query, setQuery] = useState("");
   const q = simplify(query.trim());
   const shown = q
-    ? players.filter((p) => simplify(p.name).includes(q) || simplify(p.code).includes(q))
+    ? players.filter((p) => simplify(p.name).includes(q) || simplify(p.code).includes(q) || p.groups.some((g) => simplify(g).includes(q)))
     : players;
 
   if (players.length === 0) {
@@ -81,9 +82,18 @@ export default function PlayerList({ players }: { players: PlayerRow[] }) {
             </div>
 
             <div className="chips">
-              {p.tools.length === 0 ? (
-                <span className="muted small">Aucun outil</span>
+              {p.groups.length === 0 ? (
+                <span className="chip chip-warn" title="Sans groupe : pas de planning ni de fiche de personnage">
+                  Sans groupe
+                </span>
               ) : (
+                p.groups.map((g) => (
+                  <span key={g} className="chip chip-ok">
+                    👥 {g}
+                  </span>
+                ))
+              )}
+              {p.tools.length === 0 ? null : (
                 p.tools.map((t) => (
                   <span key={t.id} className="chip" title={t.name}>
                     {t.icon} {t.name}
@@ -96,10 +106,10 @@ export default function PlayerList({ players }: { players: PlayerRow[] }) {
             <div className="player-meta muted small">
               {p.sheets > 0 ? (
                 <>
-                  {p.sheets} fiche{p.sheets > 1 ? "s" : ""} · {p.sheetsComplete} complète{p.sheetsComplete > 1 ? "s" : ""}
+                  {p.sheets} homunculus · {p.sheetsComplete} complet{p.sheetsComplete > 1 ? "s" : ""}
                 </>
               ) : (
-                "Aucune fiche"
+                "Aucun homunculus"
               )}
             </div>
 

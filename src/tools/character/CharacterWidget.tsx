@@ -1,62 +1,89 @@
-// Widget du tableau de bord : le personnage du joueur et le bouton « Monter de niveau ».
-// MJ : les fiches de la table et les montées de niveau en attente.
+// Widget du tableau de bord : les personnages du joueur (un par groupe) et le bouton « Monter de niveau ».
+// MJ : les fiches de chaque groupe et les montées de niveau en attente.
 import Link from "next/link";
-import { getCharacter, getCharacters, getUsers, type User } from "@/lib/db";
+import { getCharacters, getGroups, getUsers, type StoredCharacter, type User } from "@/lib/db";
+import { membersOf, visibleGroups } from "@/lib/groups";
 import { derive, fmtMod, shortLabel } from "./rules";
 import { CHARACTER_TOOL_ID, type CharacterState } from "./types";
 
 const HREF = `/outils/${CHARACTER_TOOL_ID}`;
 
 export default async function CharacterWidget({ user }: { user: User }) {
+  const [chars, users, allGroups] = await Promise.all([getCharacters(), getUsers(), getGroups()]);
+  const groups = visibleGroups(user, allGroups);
+
   if (user.role === "admin") {
-    const [chars, users] = await Promise.all([getCharacters(), getUsers()]);
-    const players = users.filter((u) => u.role === "player" && u.tools.includes(CHARACTER_TOOL_ID));
-    if (players.length === 0) return <p className="muted">Aucun joueur n&apos;a encore accès aux fiches de personnage.</p>;
+    if (groups.length === 0) return <p className="muted">Aucun groupe de jeu pour l&apos;instant.</p>;
     return (
-      <ul className="pw-list cs-widget-roster">
-        {players.map((p) => {
-          const c = chars.find((x) => x.ownerId === p.id);
-          const s = c?.state as CharacterState | undefined;
+      <div className="cs-widget-groups">
+        {groups.map((g) => {
+          const members = membersOf(users, g.id);
           return (
-            <li key={p.id}>
-              <Link href={HREF} className="pw-poll">
-                <span className="stack-xs">
-                  <strong>{s?.name ?? p.name}</strong>
-                  <span className="muted small">{s ? `${p.name} · ${shortLabel(s)}` : "Pas encore de fiche"}</span>
-                </span>
-                {c && s && c.grantedLevel > s.level ? (
-                  <span className="chip chip-accent">Montée en attente</span>
-                ) : (
-                  s && <span className="chip">Niv. {s.level}</span>
-                )}
-              </Link>
-            </li>
+            <div key={g.id} className="stack-xs">
+              <span className="label">👥 {g.name}</span>
+              {members.length === 0 ? (
+                <span className="muted small">Aucun joueur.</span>
+              ) : (
+                <ul className="pw-list cs-widget-roster">
+                  {members.map((p) => {
+                    const c = chars.find((x) => x.ownerId === p.id && x.groupId === g.id);
+                    const s = c?.state as CharacterState | undefined;
+                    return (
+                      <li key={p.id}>
+                        <Link href={HREF} className="pw-poll">
+                          <span className="stack-xs">
+                            <strong>{s?.name ?? p.name}</strong>
+                            <span className="muted small">{s ? `${p.name} · ${shortLabel(s)}` : "Pas encore de fiche"}</span>
+                          </span>
+                          {c && s && c.grantedLevel > s.level ? <span className="chip chip-accent">Montée en attente</span> : s && <span className="chip">Niv. {s.level}</span>}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           );
         })}
-      </ul>
-    );
-  }
-
-  const record = await getCharacter(user.id);
-  if (!record) {
-    return (
-      <div className="cs-widget-empty">
-        <p className="muted">Tu n&apos;as pas encore de personnage. L&apos;assistant t&apos;accompagne étape par étape.</p>
-        <Link href={HREF} className="btn">
-          Créer mon personnage
-        </Link>
       </div>
     );
   }
 
-  const s = record.state as CharacterState;
-  const d = derive(s);
-  const canLevelUp = record.grantedLevel > s.level;
-  const hpRatio = d.hpMax ? s.play.hp / d.hpMax : 0;
+  const multi = groups.length > 1;
+  return (
+    <div className="cs-widget-groups">
+      {groups.map((g) => {
+        const c = chars.find((x) => x.ownerId === user.id && x.groupId === g.id);
+        return (
+          <div key={g.id} className="stack-xs">
+            {multi && <span className="label">👥 {g.name}</span>}
+            {c ? (
+              <CharacterLine c={c} groupId={g.id} />
+            ) : (
+              <div className="cs-widget-empty">
+                <p className="muted">
+                  Tu n&apos;as pas encore de personnage{multi ? " dans ce groupe" : ""}. L&apos;assistant t&apos;accompagne étape par étape.
+                </p>
+                <Link href={`${HREF}?groupe=${g.id}`} className="btn">
+                  Créer mon personnage
+                </Link>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
+function CharacterLine({ c, groupId }: { c: StoredCharacter; groupId: string }) {
+  const s = c.state as CharacterState;
+  const d = derive(s);
+  const canLevelUp = c.grantedLevel > s.level;
+  const hpRatio = d.hpMax ? s.play.hp / d.hpMax : 0;
   return (
     <div className="cs-widget">
-      <Link href={HREF} className="cs-widget-id">
+      <Link href={`${HREF}?groupe=${groupId}`} className="cs-widget-id">
         <span className="cs-portrait" aria-hidden="true">
           {s.name.charAt(0).toUpperCase()}
           <span className="cs-level">{s.level}</span>
@@ -95,7 +122,7 @@ export default async function CharacterWidget({ user }: { user: User }) {
       </div>
 
       {canLevelUp && (
-        <Link href={`${HREF}?levelup=1`} className="btn levelup-btn cs-widget-levelup">
+        <Link href={`${HREF}?groupe=${groupId}&levelup=${c.id}`} className="btn levelup-btn cs-widget-levelup">
           ✦ Monter de niveau
         </Link>
       )}

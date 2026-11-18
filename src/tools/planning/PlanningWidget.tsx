@@ -24,7 +24,7 @@ const MINE_LABEL = { todo: "À remplir", partial: "Incomplet", done: "Répondu" 
 const MINE_CHIP = { todo: "chip-accent", partial: "chip-warn", done: "chip-ok" } as const;
 
 export default async function PlanningWidget({ user }: { user: User }) {
-  const { isAdmin, upcoming, open } = await getPlanningOverview(user);
+  const { isAdmin, multiGroup, upcoming, open } = await getPlanningOverview(user);
   const today = tableToday();
   const [next, ...later] = upcoming;
 
@@ -49,10 +49,11 @@ export default async function PlanningWidget({ user }: { user: User }) {
           <strong className="pw-date">{fmtDate(next.slot.date)}</strong>
           <span className="muted">
             {fmtHours(next.slot)} · {next.title}
+            {multiGroup && ` · ${next.group}`}
           </span>
           {later.length > 0 && (
             <span className="pw-later small">
-              Ensuite : {later.slice(0, 2).map((u) => `${fmtDate(u.slot.date, true)} (${u.title})`).join(", ")}
+              Ensuite : {later.slice(0, 2).map((u) => `${fmtDate(u.slot.date, true)} (${multiGroup ? u.group : u.title})`).join(", ")}
             </span>
           )}
         </Link>
@@ -72,6 +73,7 @@ export default async function PlanningWidget({ user }: { user: User }) {
                 <Link href={HREF} className="pw-poll">
                   <span className="stack-xs">
                     <strong>{p.title}</strong>
+                    {multiGroup && <span className="small pw-group">👥 {p.group}</span>}
                     <span className="muted small">
                       {p.slots.length} créneau{p.slots.length > 1 ? "x" : ""} · {fmtDate(p.slots[0].date, true)}
                       {p.slots.length > 1 && ` → ${fmtDate(p.slots[p.slots.length - 1].date, true)}`}

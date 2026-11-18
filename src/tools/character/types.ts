@@ -115,6 +115,8 @@ export type CharacterState = {
 export type CharacterRecord = {
   id: string;
   ownerId: string;
+  /** Groupe (campagne) de la fiche. */
+  groupId: string | null;
   ownerName: string;
   state: CharacterState;
   /** Niveau autorisé par le MJ : si > state.level, le joueur peut monter de niveau. */

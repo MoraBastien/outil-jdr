@@ -18,6 +18,8 @@ export type User = {
   tools: string[];
   /** Écho de l'homunculus du joueur (Atelier de Rigel), fixé par le MJ. Absent = 1. */
   echo?: number;
+  /** Groupes de jeu du joueur (voir `groups`). Donnent accès au planning et aux fiches de personnage. */
+  groupIds?: string[];
   profile: {
     fields: ProfileField[];
     notes: string;
@@ -51,6 +53,8 @@ export type PollAnswer = "yes" | "maybe" | "no";
 export type PollSlot = { id: string; date: string; start: string; end: string | null };
 export type Poll = {
   id: string;
+  /** Groupe concerné (absent pour les sondages créés avant les groupes). */
+  groupId?: string;
   title: string;
   note: string;
   slots: PollSlot[];
@@ -66,6 +70,8 @@ export type Poll = {
 export type StoredCharacter = {
   id: string;
   ownerId: string;
+  /** Groupe (campagne) du personnage : un joueur a une fiche par groupe. Absent pour les anciennes fiches. */
+  groupId?: string;
   state: unknown;
   /** Niveau autorisé par le MJ (le joueur peut monter jusqu'à ce niveau). */
   grantedLevel: number;
@@ -75,8 +81,12 @@ export type StoredCharacter = {
   updatedAt: string;
 };
 
+/** Groupe de jeu (une table, une campagne). Les membres sont les joueurs dont `groupIds` contient son id. */
+export type Group = { id: string; name: string; createdAt: string };
+
 export type Db = {
   users: User[];
+  groups?: Group[];
   homunculi?: StoredHomunculus[];
   diceLog?: DiceLogEntry[];
   polls?: Poll[];
@@ -221,8 +231,8 @@ export async function getCharacters(): Promise<StoredCharacter[]> {
   return (await load()).characters ?? [];
 }
 
-export async function getCharacter(ownerId: string): Promise<StoredCharacter | undefined> {
-  return ((await load()).characters ?? []).find((c) => c.ownerId === ownerId);
+export async function getGroups(): Promise<Group[]> {
+  return ((await load()).groups ?? []).sort((a, b) => a.name.localeCompare(b.name, "fr"));
 }
 
 export async function getPolls(): Promise<Poll[]> {

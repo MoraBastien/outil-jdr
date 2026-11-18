@@ -1,22 +1,28 @@
 "use server";
-// Actions serveur de la fiche de personnage.
+// Actions serveur de la fiche de personnage. Une fiche par joueur ET par groupe de jeu.
 // Rien n'est cru sur parole : création et montée de niveau sont recalculées par le moteur de règles,
 // le dé de vie est lancé ici, et le niveau ne monte que si le MJ l'a accordé.
 
 import { randomInt } from "crypto";
 import { requireUser, canUseTool } from "@/lib/auth";
-import { getCharacters, getUsers, randomUUID, updateDb, type StoredCharacter, type User } from "@/lib/db";
+import { getCharacters, getGroups, getUsers, randomUUID, updateDb, type Db, type StoredCharacter, type User } from "@/lib/db";
+import { membersOf, userGroupIds, visibleGroups } from "@/lib/groups";
 import { getClass } from "./data/classes";
 import { RuleError, applyLevelUp, averageHp, buildCharacter, sanitizeFree, type CreationInput } from "./rules";
 import { CHARACTER_TOOL_ID, MAX_LEVEL, type Answers, type CharacterRecord, type CharacterState } from "./types";
 
+type Snapshot = { level: number; at: string; state: CharacterState };
+export type AdminEntry = { record: CharacterRecord; snapshots: Snapshot[] };
+
 export type CharacterView = {
   isAdmin: boolean;
   meId: string;
-  /** Fiche du joueur connecté (null s'il n'en a pas encore). */
-  mine: CharacterRecord | null;
-  /** MJ : tous les joueurs ayant l'outil, avec leur fiche et ses copies par niveau. */
-  players: { id: string; name: string; record: CharacterRecord | null; snapshots: { level: number; at: string; state: CharacterState }[] }[];
+  /** Joueur : une entrée par groupe dont il est membre, avec sa fiche (ou null). */
+  mine: { group: { id: string; name: string }; record: CharacterRecord | null }[];
+  /** MJ : chaque groupe, ses membres et leur fiche dans ce groupe. */
+  groups: { id: string; name: string; members: { id: string; name: string; entry: AdminEntry | null }[] }[];
+  /** MJ : fiches hors groupe (groupe supprimé, joueur retiré du groupe, anciennes fiches). */
+  archived: (AdminEntry & { groupName: string | null })[];
 };
 
 export type ActionResult = { ok: true; view: CharacterView; levelUp?: { hpDie: number; rolled: boolean; summary: string[] } } | { ok: false; error: string };
@@ -30,44 +36,66 @@ async function requireToolUser(): Promise<User> {
 const toRecord = (c: StoredCharacter, users: User[]): CharacterRecord => ({
   id: c.id,
   ownerId: c.ownerId,
+  groupId: c.groupId ?? null,
   ownerName: users.find((u) => u.id === c.ownerId)?.name ?? "?",
   state: c.state as CharacterState,
   grantedLevel: c.grantedLevel,
   updatedAt: c.updatedAt,
 });
+const toEntry = (c: StoredCharacter, users: User[]): AdminEntry => ({
+  record: toRecord(c, users),
+  snapshots: (c.snapshots ?? []).map((s) => ({ ...s, state: s.state as CharacterState })),
+});
 
 async function view(user: User): Promise<CharacterView> {
-  const [chars, users] = await Promise.all([getCharacters(), getUsers()]);
-  const mineRaw = chars.find((c) => c.ownerId === user.id);
+  const [chars, users, allGroups] = await Promise.all([getCharacters(), getUsers(), getGroups()]);
   const isAdmin = user.role === "admin";
+  const groups = visibleGroups(user, allGroups);
+  const find = (ownerId: string, groupId: string) => chars.find((c) => c.ownerId === ownerId && c.groupId === groupId);
+
+  if (!isAdmin) {
+    return {
+      isAdmin,
+      meId: user.id,
+      mine: groups.map((g) => {
+        const c = find(user.id, g.id);
+        return { group: { id: g.id, name: g.name }, record: c ? toRecord(c, users) : null };
+      }),
+      groups: [],
+      archived: [],
+    };
+  }
+
+  const placed = new Set<string>();
+  const adminGroups = groups.map((g) => ({
+    id: g.id,
+    name: g.name,
+    members: membersOf(users, g.id).map((m) => {
+      const c = find(m.id, g.id);
+      if (c) placed.add(c.id);
+      return { id: m.id, name: m.name, entry: c ? toEntry(c, users) : null };
+    }),
+  }));
+  const groupName = new Map(allGroups.map((g) => [g.id, g.name]));
   return {
     isAdmin,
     meId: user.id,
-    mine: mineRaw ? toRecord(mineRaw, users) : null,
-    players: isAdmin
-      ? users
-          .filter((u) => u.role === "player" && u.tools.includes(CHARACTER_TOOL_ID))
-          .sort((a, b) => a.name.localeCompare(b.name, "fr"))
-          .map((u) => {
-            const c = chars.find((x) => x.ownerId === u.id);
-            return {
-              id: u.id,
-              name: u.name,
-              record: c ? toRecord(c, users) : null,
-              snapshots: (c?.snapshots ?? []).map((sn) => ({ ...sn, state: sn.state as CharacterState })),
-            };
-          })
-      : [],
+    mine: [],
+    groups: adminGroups,
+    archived: chars.filter((c) => !placed.has(c.id)).map((c) => ({ ...toEntry(c, users), groupName: c.groupId ? groupName.get(c.groupId) ?? null : null })),
   };
 }
 
-/** Le joueur agit sur sa fiche ; le MJ peut agir sur celle de n'importe quel joueur ayant l'outil. */
-async function targetOwner(user: User, ownerId: string | null | undefined): Promise<string> {
-  if (!ownerId || ownerId === user.id) return user.id;
-  if (user.role !== "admin") throw new RuleError("Tu ne peux modifier que ta propre fiche.");
-  const target = (await getUsers()).find((u) => u.id === ownerId && u.role === "player");
-  if (!target || !target.tools.includes(CHARACTER_TOOL_ID)) throw new RuleError("Ce joueur n'a pas accès aux fiches de personnage.");
-  return target.id;
+/**
+ * Fiche sur laquelle l'utilisateur peut agir (dans une transaction) :
+ * le MJ, toutes ; un joueur, la sienne dans un groupe dont il fait partie.
+ */
+function editable(db: Db, user: User, characterId: string): StoredCharacter {
+  const c = (db.characters ?? []).find((x) => x.id === characterId);
+  if (!c) throw new RuleError("Fiche introuvable.");
+  if (user.role === "admin") return c;
+  if (c.ownerId !== user.id || !c.groupId || !userGroupIds(user).includes(c.groupId)) throw new RuleError("Tu ne peux modifier que tes propres fiches.");
+  return c;
 }
 
 async function guard(user: User, fn: () => Promise<ActionResult | void>): Promise<ActionResult> {
@@ -85,41 +113,41 @@ export async function getCharacterViewAction(): Promise<CharacterView> {
   return view(await requireToolUser());
 }
 
-export async function createCharacterAction(input: CreationInput, ownerId?: string | null): Promise<ActionResult> {
+/** Crée la fiche d'un joueur pour un groupe (le joueur pour lui-même, le MJ pour n'importe quel membre). */
+export async function createCharacterAction(input: CreationInput, groupId: string, ownerId?: string | null): Promise<ActionResult> {
   const user = await requireToolUser();
   return guard(user, async () => {
-    const owner = await targetOwner(user, ownerId);
+    const owner = ownerId && user.role === "admin" ? ownerId : user.id;
     const state = buildCharacter(input);
     await updateDb((db) => {
+      if (!(db.groups ?? []).some((g) => g.id === groupId)) throw new RuleError("Groupe introuvable.");
+      const target = db.users.find((u) => u.id === owner && u.role === "player");
+      if (!target || !userGroupIds(target).includes(groupId)) throw new RuleError("Ce joueur ne fait pas partie de ce groupe.");
       const list = (db.characters ??= []);
-      if (list.some((c) => c.ownerId === owner)) throw new RuleError("Ce joueur a déjà une fiche.");
+      if (list.some((c) => c.ownerId === owner && c.groupId === groupId)) throw new RuleError("Ce joueur a déjà une fiche dans ce groupe.");
       const now = new Date().toISOString();
-      list.push({ id: randomUUID(), ownerId: owner, state, grantedLevel: 1, snapshots: [{ level: 1, at: now, state }], createdAt: now, updatedAt: now });
+      list.push({ id: randomUUID(), ownerId: owner, groupId, state, grantedLevel: 1, snapshots: [{ level: 1, at: now, state }], createdAt: now, updatedAt: now });
     });
   });
 }
 
-export async function saveCharacterAction(patch: Partial<CharacterState>, ownerId?: string | null): Promise<ActionResult> {
+export async function saveCharacterAction(characterId: string, patch: Partial<CharacterState>): Promise<ActionResult> {
   const user = await requireToolUser();
   return guard(user, async () => {
-    const owner = await targetOwner(user, ownerId);
     await updateDb((db) => {
-      const c = (db.characters ?? []).find((x) => x.ownerId === owner);
-      if (!c) throw new RuleError("Fiche introuvable.");
+      const c = editable(db, user, characterId);
       c.state = sanitizeFree(c.state as CharacterState, patch ?? {});
       c.updatedAt = new Date().toISOString();
     });
   });
 }
 
-export async function levelUpAction(answers: Answers, hpMode: "average" | "roll", ownerId?: string | null): Promise<ActionResult> {
+export async function levelUpAction(characterId: string, answers: Answers, hpMode: "average" | "roll"): Promise<ActionResult> {
   const user = await requireToolUser();
   return guard(user, async () => {
-    const owner = await targetOwner(user, ownerId);
     let result: { hpDie: number; rolled: boolean; summary: string[] } | undefined;
     await updateDb((db) => {
-      const c = (db.characters ?? []).find((x) => x.ownerId === owner);
-      if (!c) throw new RuleError("Fiche introuvable.");
+      const c = editable(db, user, characterId);
       const state = c.state as CharacterState;
       if (c.grantedLevel <= state.level) throw new RuleError("Ton MJ ne t'a pas encore accordé de niveau.");
       const hitDie = getClass(state.classId)?.hitDie ?? 8;
@@ -136,14 +164,13 @@ export async function levelUpAction(answers: Answers, hpMode: "average" | "roll"
   });
 }
 
-/** MJ : autorise le joueur à monter jusqu'à `level` (ou retire une autorisation non utilisée). */
-export async function grantLevelAction(ownerId: string, level: number): Promise<ActionResult> {
+/** MJ : autorise une fiche à monter jusqu'à `level` (ou retire une autorisation non utilisée). */
+export async function grantLevelAction(characterId: string, level: number): Promise<ActionResult> {
   const user = await requireToolUser();
   return guard(user, async () => {
     if (user.role !== "admin") throw new RuleError("Réservé au MJ.");
     await updateDb((db) => {
-      const c = (db.characters ?? []).find((x) => x.ownerId === ownerId);
-      if (!c) throw new RuleError("Fiche introuvable.");
+      const c = editable(db, user, characterId);
       const current = (c.state as CharacterState).level;
       c.grantedLevel = Math.min(MAX_LEVEL, Math.max(current, Math.round(level)));
       c.updatedAt = new Date().toISOString();
@@ -151,12 +178,12 @@ export async function grantLevelAction(ownerId: string, level: number): Promise<
   });
 }
 
-export async function deleteCharacterAction(ownerId: string): Promise<ActionResult> {
+export async function deleteCharacterAction(characterId: string): Promise<ActionResult> {
   const user = await requireToolUser();
   return guard(user, async () => {
     if (user.role !== "admin") throw new RuleError("Réservé au MJ.");
     await updateDb((db) => {
-      db.characters = (db.characters ?? []).filter((c) => c.ownerId !== ownerId);
+      db.characters = (db.characters ?? []).filter((c) => c.id !== characterId);
     });
   });
 }

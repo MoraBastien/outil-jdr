@@ -12,11 +12,12 @@ export type EditorPlayer = {
   code: string;
   echo: number;
   tools: string[];
+  groupIds: string[];
   fields: { label: string; value: string }[];
   notes: string;
 };
 
-export type EditorTool = { id: string; name: string; icon: string; description: string };
+export type EditorTool = { id: string; name: string; icon: string; description: string; byGroup?: boolean };
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // sans 0/O, 1/I/L
 
@@ -38,16 +39,19 @@ function SaveButton() {
 export default function PlayerEditor({
   player,
   tools,
+  groups,
   homunculusToolId,
   maxEcho,
 }: {
   player: EditorPlayer;
   tools: EditorTool[];
+  groups: { id: string; name: string }[];
   homunculusToolId: string;
   maxEcho: number;
 }) {
   const [code, setCode] = useState(player.code);
   const [selected, setSelected] = useState<string[]>(player.tools);
+  const [memberOf, setMemberOf] = useState<string[]>(player.groupIds);
   const [echo, setEcho] = useState(player.echo);
   const [nextKey, setNextKey] = useState(player.fields.length + 1);
   const [fields, setFields] = useState<Field[]>(() =>
@@ -126,9 +130,46 @@ export default function PlayerEditor({
       </section>
 
       <section className="card stack">
+        <div className="section-head">
+          <h2 className="subtitle">Groupes de jeu</h2>
+          <span className="muted small">Donnent accès au planning et à une fiche de personnage par groupe.</span>
+        </div>
+        {groups.length === 0 ? (
+          <p className="muted small">Aucun groupe pour l&apos;instant : crée-en un sur la page d&apos;administration.</p>
+        ) : (
+          <div className="checks">
+            {groups.map((g) => (
+              <label key={g.id} className={`group-check${memberOf.includes(g.id) ? " on" : ""}`}>
+                <input
+                  type="checkbox"
+                  name="groups"
+                  value={g.id}
+                  checked={memberOf.includes(g.id)}
+                  onChange={(e) => setMemberOf((m) => (e.target.checked ? [...m, g.id] : m.filter((x) => x !== g.id)))}
+                />
+                👥 {g.name}
+              </label>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="card stack">
         <h2 className="subtitle">Outils autorisés</h2>
         <div className="tool-toggles">
           {tools.map((t) => {
+            if (t.byGroup) {
+              const on = memberOf.length > 0;
+              return (
+                <div key={t.id} className={`tool-toggle auto${on ? " on" : ""}`}>
+                  <span className="tool-icon">{t.icon}</span>
+                  <span className="stack-xs">
+                    <strong>{t.name}</strong>
+                    <span className="muted small">{on ? "Automatique : le joueur est dans un groupe." : "Bloqué : le joueur n'est dans aucun groupe."}</span>
+                  </span>
+                </div>
+              );
+            }
             const on = selected.includes(t.id);
             return (
               <label key={t.id} className={`tool-toggle${on ? " on" : ""}`}>

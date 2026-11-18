@@ -76,7 +76,7 @@ export const TOOLS: ToolDefinition[] = [
   {
     id: PLANNING_TOOL_ID, // "planning"
     name: "Planning des sessions",
-    description: "Le MJ propose des dates et des horaires, chacun indique ses disponibilités.",
+    description: "Le MJ propose des dates à chaque groupe, chacun indique ses disponibilités.",
     icon: "📅",
     component: Planning,
     widget: { component: PlanningWidget, title: "Prochaines sessions", wide: true, order: 10 },
@@ -88,7 +88,7 @@ export const TOOLS: ToolDefinition[] = [
     icon: "🛡️",
     component: CharacterTool,
     wide: true,
-    widget: { component: CharacterWidget, title: "Mon personnage", adminTitle: "Personnages de la table", wide: true, order: 5 },
+    widget: { component: CharacterWidget, title: "Mes personnages", adminTitle: "Personnages de la table", wide: true, order: 5 },
   },
   // { id: "mon-outil", name: "Mon outil", description: "…", icon: "🗺️", component: MonOutil, widget: { component: MonWidget } },
 ];

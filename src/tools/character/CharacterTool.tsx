@@ -1,7 +1,8 @@
 "use client";
-// Outil « Fiche de personnage » : création, fiche, montée de niveau ; pour le MJ, toutes les fiches.
+// Outil « Fiche de personnage » : une fiche par joueur et par groupe de jeu.
+// Joueur : un onglet par groupe (création, fiche, montée de niveau). MJ : les fiches de chaque groupe.
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import type { ToolPlayer } from "../registry";
 import {
   createCharacterAction,
@@ -11,41 +12,48 @@ import {
   levelUpAction,
   saveCharacterAction,
   type ActionResult,
+  type AdminEntry,
   type CharacterView,
 } from "./actions";
 import CreationWizard from "./components/CreationWizard";
 import LevelUpWizard from "./components/LevelUpWizard";
 import Sheet from "./components/Sheet";
 import { shortLabel, type CreationInput } from "./rules";
-import { MAX_LEVEL, type Answers, type CharacterRecord, type CharacterState } from "./types";
+import { MAX_LEVEL, type Answers, type CharacterRecord } from "./types";
+
+type Run = (p: Promise<ActionResult>) => Promise<ActionResult | null>;
 
 export default function CharacterTool({ player }: { player: ToolPlayer }) {
   const [view, setView] = useState<CharacterView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [levelUpFor, setLevelUpFor] = useState<string | null>(null);
-  const [wantLevelUp, setWantLevelUp] = useState(false);
+  // Lien du tableau de bord : /outils/personnage?groupe=<id>&levelup=<idFiche>
+  const [initial, setInitial] = useState<{ group: string | null; levelUp: string | null }>({ group: null, levelUp: null });
+  const [groupTab, setGroupTab] = useState<string | null>(null);
 
   useEffect(() => {
-    // Lien « Monter de niveau » du tableau de bord : /outils/personnage?levelup=1
-    if (new URLSearchParams(window.location.search).has("levelup")) {
-      setWantLevelUp(true);
-      window.history.replaceState(null, "", window.location.pathname);
-    }
+    const q = new URLSearchParams(window.location.search);
+    setInitial({ group: q.get("groupe"), levelUp: q.get("levelup") });
+    if (q.has("levelup") || q.has("groupe")) window.history.replaceState(null, "", window.location.pathname);
     getCharacterViewAction()
       .then(setView)
-      .catch(() => setError("Impossible de charger la fiche."));
+      .catch(() => setError("Impossible de charger les fiches."));
   }, []);
 
   useEffect(() => {
-    if (wantLevelUp && view?.mine && view.mine.grantedLevel > view.mine.state.level) {
-      setLevelUpFor(view.meId);
-      setWantLevelUp(false);
+    if (!view || view.isAdmin) return;
+    if (initial.group && view.mine.some((m) => m.group.id === initial.group)) setGroupTab(initial.group);
+    const target = view.mine.find((m) => m.record?.id === initial.levelUp)?.record;
+    if (target && target.grantedLevel > target.state.level) {
+      setGroupTab(target.groupId);
+      setLevelUpFor(target.id);
     }
-  }, [wantLevelUp, view]);
+    if (initial.group || initial.levelUp) setInitial({ group: null, levelUp: null });
+  }, [view, initial]);
 
-  const run = (p: Promise<ActionResult>) =>
-    new Promise<ActionResult | null>((resolve) => {
+  const run: Run = (p) =>
+    new Promise((resolve) => {
       startTransition(async () => {
         try {
           const r = await p;
@@ -61,7 +69,17 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
       });
     });
 
-  if (!view) return error ? <p className="flash flash-error">{error}</p> : <div className="skeleton cs-loading" aria-label="Chargement"><span /><span /><span /></div>;
+  if (!view) {
+    return error ? (
+      <p className="flash flash-error">{error}</p>
+    ) : (
+      <div className="skeleton cs-loading" aria-label="Chargement">
+        <span />
+        <span />
+        <span />
+      </div>
+    );
+  }
 
   const errorBox = error && (
     <p className="flash flash-error" role="alert">
@@ -72,8 +90,8 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
     </p>
   );
 
-  // Fiche (avec montée de niveau) pour un propriétaire donné.
-  const sheetFor = (record: CharacterRecord, ownerId: string | null) => {
+  /** Fiche + assistant de montée de niveau. */
+  const sheetFor = (record: CharacterRecord) => {
     const canLevelUp = record.grantedLevel > record.state.level;
     return (
       <>
@@ -82,17 +100,17 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
           record={record}
           editable
           canLevelUp={canLevelUp}
-          onLevelUp={() => setLevelUpFor(record.ownerId)}
-          onSave={async (patch) => Boolean((await run(saveCharacterAction(patch, ownerId)))?.ok)}
+          onLevelUp={() => setLevelUpFor(record.id)}
+          onSave={async (patch) => Boolean((await run(saveCharacterAction(record.id, patch)))?.ok)}
         />
         {/* Reste ouvert après la validation pour afficher l'écran final (la fiche est déjà au nouveau niveau). */}
-        {levelUpFor === record.ownerId && (
+        {levelUpFor === record.id && (
           <LevelUpWizard
             state={record.state}
             busy={busy}
             onClose={() => setLevelUpFor(null)}
             onConfirm={async (answers: Answers, hpMode) => {
-              const r = await run(levelUpAction(answers, hpMode, ownerId));
+              const r = await run(levelUpAction(record.id, answers, hpMode));
               return r?.ok && r.levelUp ? r.levelUp : null;
             }}
           />
@@ -103,43 +121,76 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
 
   if (view.isAdmin) return <AdminPanel view={view} busy={busy} run={run} errorBox={errorBox} sheetFor={sheetFor} />;
 
+  // Joueur : un onglet par groupe.
+  const current = view.mine.find((m) => m.group.id === groupTab) ?? view.mine[0];
+  if (!current) return <p className="muted">Tu ne fais partie d&apos;aucun groupe pour l&apos;instant.</p>;
+  const record = current.record;
+
   return (
     <div className="cs-root stack-lg">
-      {errorBox}
-      {view.mine ? (
-        <>
-          {view.mine.grantedLevel > view.mine.state.level && (
-            <div className="cs-levelup-banner">
-              <span className="cs-levelup-glow" aria-hidden="true">
-                ✦
-              </span>
-              <div className="stack-xs">
-                <strong>Ton MJ t&apos;a accordé le niveau {view.mine.state.level + 1} !</strong>
-                <span className="muted small">L&apos;assistant te guide pas à pas : nouvelles capacités, points de vie et choix.</span>
-              </div>
-              <button type="button" className="btn levelup-btn" onClick={() => setLevelUpFor(view.mine!.ownerId)}>
-                Monter de niveau
-              </button>
-            </div>
-          )}
-          {sheetFor(view.mine, null)}
-        </>
-      ) : (
-        <>
-          <div className="cs-welcome">
-            <p className="eyebrow">Bienvenue, {player.name}</p>
-            <p className="muted">
-              Créons ta fiche de personnage pour Donjons &amp; Dragons (règles 2024). Chaque étape est expliquée : tu peux cliquer sur les « ? » à tout moment.
-            </p>
-          </div>
-          <CreationWizard busy={busy} onCreate={async (input: CreationInput) => Boolean((await run(createCharacterAction(input)))?.ok)} />
-        </>
+      {view.mine.length > 1 && (
+        <nav className="cs-group-tabs" role="tablist" aria-label="Mes groupes">
+          {view.mine.map((m) => (
+            <button
+              key={m.group.id}
+              type="button"
+              role="tab"
+              aria-selected={m.group.id === current.group.id}
+              className={`cs-group-tab${m.group.id === current.group.id ? " on" : ""}`}
+              onClick={() => setGroupTab(m.group.id)}
+            >
+              <span className="cs-group-tab-name">👥 {m.group.name}</span>
+              <span className="muted small">{m.record ? `${m.record.state.name} · niv. ${m.record.state.level}` : "Pas encore de personnage"}</span>
+              {m.record && m.record.grantedLevel > m.record.state.level && <span className="cs-tab-glow" aria-label="Montée de niveau disponible" />}
+            </button>
+          ))}
+        </nav>
       )}
+      {errorBox}
+
+      <div key={current.group.id} className="stack-lg cs-group-panel">
+        {record ? (
+          <>
+            {record.grantedLevel > record.state.level && (
+              <div className="cs-levelup-banner">
+                <span className="cs-levelup-glow" aria-hidden="true">
+                  ✦
+                </span>
+                <div className="stack-xs">
+                  <strong>Ton MJ t&apos;a accordé le niveau {record.state.level + 1} !</strong>
+                  <span className="muted small">L&apos;assistant te guide pas à pas : nouvelles capacités, points de vie et choix.</span>
+                </div>
+                <button type="button" className="btn levelup-btn" onClick={() => setLevelUpFor(record.id)}>
+                  Monter de niveau
+                </button>
+              </div>
+            )}
+            {sheetFor(record)}
+          </>
+        ) : (
+          <>
+            <div className="cs-welcome">
+              <p className="eyebrow">
+                Bienvenue, {player.name}
+                {view.mine.length > 1 && ` · ${current.group.name}`}
+              </p>
+              <p className="muted">
+                Créons ta fiche de personnage pour Donjons &amp; Dragons (règles 2024)
+                {view.mine.length > 1 ? ` pour le groupe « ${current.group.name} »` : ""}. Chaque étape est expliquée : tu peux cliquer sur les « ? » à
+                tout moment.
+              </p>
+            </div>
+            <CreationWizard busy={busy} onCreate={async (input: CreationInput) => Boolean((await run(createCharacterAction(input, current.group.id)))?.ok)} />
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
 /* ---------- Vue du MJ ---------- */
+
+type Selection = { kind: "sheet"; characterId: string } | { kind: "create"; ownerId: string; ownerName: string; groupId: string; groupName: string } | null;
 
 function AdminPanel({
   view,
@@ -150,38 +201,83 @@ function AdminPanel({
 }: {
   view: CharacterView;
   busy: boolean;
-  run: (p: Promise<ActionResult>) => Promise<ActionResult | null>;
-  errorBox: React.ReactNode;
-  sheetFor: (record: CharacterRecord, ownerId: string | null) => React.ReactNode;
+  run: Run;
+  errorBox: ReactNode;
+  sheetFor: (record: CharacterRecord) => ReactNode;
 }) {
-  const [selected, setSelected] = useState<string | null>(view.players.find((p) => p.record)?.id ?? null);
-  const [creating, setCreating] = useState<string | null>(null);
+  const firstSheet = view.groups.flatMap((g) => g.members).find((m) => m.entry)?.entry?.record.id;
+  const [sel, setSel] = useState<Selection>(firstSheet ? { kind: "sheet", characterId: firstSheet } : null);
   const [snapshotLevel, setSnapshotLevel] = useState<number | null>(null);
-  const current = view.players.find((p) => p.id === selected);
-  const creatingFor = view.players.find((p) => p.id === creating);
 
-  if (creatingFor) {
+  const allEntries: AdminEntry[] = [...view.groups.flatMap((g) => g.members.flatMap((m) => (m.entry ? [m.entry] : []))), ...view.archived];
+  const selected = sel?.kind === "sheet" ? allEntries.find((e) => e.record.id === sel.characterId) : undefined;
+  const isArchived = Boolean(selected && view.archived.some((a) => a.record.id === selected.record.id));
+  const pick = (id: string) => (setSel({ kind: "sheet", characterId: id }), setSnapshotLevel(null));
+
+  if (sel?.kind === "create") {
     return (
       <div className="cs-root stack-lg">
         {errorBox}
         <CreationWizard
-          forName={creatingFor.name}
+          forName={`${sel.ownerName} (${sel.groupName})`}
           busy={busy}
-          onCancel={() => setCreating(null)}
+          onCancel={() => setSel(null)}
           onCreate={async (input) => {
-            const ok = Boolean((await run(createCharacterAction(input, creatingFor.id)))?.ok);
-            if (ok) {
-              setCreating(null);
-              setSelected(creatingFor.id);
+            const r = await run(createCharacterAction(input, sel.groupId, sel.ownerId));
+            if (r?.ok) {
+              const created = r.view.groups.find((g) => g.id === sel.groupId)?.members.find((m) => m.id === sel.ownerId)?.entry;
+              setSel(created ? { kind: "sheet", characterId: created.record.id } : null);
             }
-            return ok;
+            return Boolean(r?.ok);
           }}
         />
       </div>
     );
   }
 
-  const snapshot = current?.snapshots.find((s) => s.level === snapshotLevel);
+  /** `archivedLabel` : fiche hors groupe (lecture seule, pas de montée de niveau). */
+  const rosterItem = (key: string, name: string, entry: AdminEntry | null, onCreate?: () => void, archivedLabel?: string) => {
+    const r = entry?.record;
+    const pending = r && r.grantedLevel > r.state.level;
+    const live = r && archivedLabel === undefined;
+    return (
+      <li key={key} className={`cs-roster-item${r && selected?.record.id === r.id ? " on" : ""}`}>
+        <button type="button" className="cs-roster-main" onClick={() => r && pick(r.id)} disabled={!r}>
+          <span className="avatar avatar-lg" aria-hidden="true">
+            {(r?.state.name || name).charAt(0).toUpperCase()}
+          </span>
+          <span className="stack-xs">
+            <strong>{r ? r.state.name : name}</strong>
+            <span className="muted small">{r ? `${name} · ${shortLabel(r.state)}` : "Pas encore de fiche"}</span>
+            {archivedLabel && <span className="muted small">{archivedLabel}</span>}
+          </span>
+        </button>
+        <div className="cs-roster-actions">
+          {!r && onCreate && (
+            <button type="button" className="btn btn-ghost btn-small" onClick={onCreate}>
+              Créer pour {name}
+            </button>
+          )}
+          {live && pending && (
+            <>
+              <span className="chip chip-accent">Niveau {r.grantedLevel} accordé</span>
+              <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => run(grantLevelAction(r.id, r.state.level))}>
+                Annuler
+              </button>
+            </>
+          )}
+          {live && !pending && r.state.level < MAX_LEVEL && (
+            <button type="button" className="btn btn-small" disabled={busy} onClick={() => run(grantLevelAction(r.id, r.state.level + 1))}>
+              Accorder le niveau {r.state.level + 1}
+            </button>
+          )}
+          {live && !pending && r.state.level >= MAX_LEVEL && <span className="chip">Niveau max ({MAX_LEVEL})</span>}
+        </div>
+      </li>
+    );
+  };
+
+  const snapshot = selected?.snapshots.find((s) => s.level === snapshotLevel);
 
   return (
     <div className="cs-root stack-lg">
@@ -189,65 +285,47 @@ function AdminPanel({
         <p className="eyebrow">Maître du jeu</p>
         <h1 className="title">Fiches des personnages</h1>
         <p className="muted">
-          Accorde un niveau à un joueur : un bouton « Monter de niveau » s&apos;allume sur son tableau de bord. Une copie de chaque fiche est gardée à chaque
-          niveau.
+          Chaque joueur a une fiche par groupe. Accorde un niveau : un bouton « Monter de niveau » s&apos;allume sur son tableau de bord. Une copie de chaque
+          fiche est gardée à chaque niveau.
         </p>
       </header>
       {errorBox}
 
-      {view.players.length === 0 ? (
-        <p className="flash flash-error">Aucun joueur n&apos;a accès à cet outil : autorise-le sur leur page dans l&apos;administration.</p>
-      ) : (
-        <ul className="cs-roster">
-          {view.players.map((p) => {
-            const r = p.record;
-            const pending = r && r.grantedLevel > r.state.level;
-            return (
-              <li key={p.id} className={`cs-roster-item${selected === p.id ? " on" : ""}`}>
-                <button type="button" className="cs-roster-main" onClick={() => (setSelected(p.id), setSnapshotLevel(null))} disabled={!r}>
-                  <span className="avatar avatar-lg" aria-hidden="true">
-                    {(r?.state.name || p.name).charAt(0).toUpperCase()}
-                  </span>
-                  <span className="stack-xs">
-                    <strong>{r ? r.state.name : p.name}</strong>
-                    <span className="muted small">{r ? `${p.name} · ${shortLabel(r.state)}` : "Pas encore de fiche"}</span>
-                  </span>
-                </button>
-                <div className="cs-roster-actions">
-                  {!r && (
-                    <button type="button" className="btn btn-ghost btn-small" onClick={() => setCreating(p.id)}>
-                      Créer pour {p.name}
-                    </button>
-                  )}
-                  {r && pending && (
-                    <>
-                      <span className="chip chip-accent">Niveau {r.grantedLevel} accordé</span>
-                      <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => run(grantLevelAction(p.id, r.state.level))}>
-                        Annuler
-                      </button>
-                    </>
-                  )}
-                  {r && !pending && r.state.level < MAX_LEVEL && (
-                    <button type="button" className="btn btn-small" disabled={busy} onClick={() => run(grantLevelAction(p.id, r.state.level + 1))}>
-                      Accorder le niveau {r.state.level + 1}
-                    </button>
-                  )}
-                  {r && !pending && r.state.level >= MAX_LEVEL && <span className="chip">Niveau max ({MAX_LEVEL})</span>}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+      {view.groups.length === 0 && <p className="flash flash-error">Aucun groupe de jeu : crée un groupe et ajoutes-y des joueurs dans l&apos;administration.</p>}
+
+      {view.groups.map((g) => (
+        <section key={g.id} className="stack">
+          <h2 className="subtitle">👥 {g.name}</h2>
+          {g.members.length === 0 ? (
+            <p className="muted small">Aucun joueur dans ce groupe.</p>
+          ) : (
+            <ul className="cs-roster">
+              {g.members.map((m) =>
+                rosterItem(`${g.id}-${m.id}`, m.name, m.entry, () => setSel({ kind: "create", ownerId: m.id, ownerName: m.name, groupId: g.id, groupName: g.name })),
+              )}
+            </ul>
+          )}
+        </section>
+      ))}
+
+      {view.archived.length > 0 && (
+        <details className="pl-archive">
+          <summary className="subtitle">Fiches archivées ({view.archived.length})</summary>
+          <p className="muted small">Fiches dont le groupe a été supprimé ou dont le joueur a quitté le groupe. Le joueur n&apos;y a plus accès.</p>
+          <ul className="cs-roster">
+            {view.archived.map((a) => rosterItem(a.record.id, a.record.ownerName, a, undefined, a.groupName ? `Ancien groupe : ${a.groupName}` : "Sans groupe"))}
+          </ul>
+        </details>
       )}
 
-      {current?.record && (
+      {selected && (
         <section className="stack">
           <div className="cs-row-between">
             <div className="segmented-tabs" role="tablist" aria-label="Version de la fiche">
               <button type="button" role="tab" aria-selected={snapshotLevel === null} className={snapshotLevel === null ? "on" : ""} onClick={() => setSnapshotLevel(null)}>
                 Fiche actuelle
               </button>
-              {current.snapshots.map((s) => (
+              {selected.snapshots.map((s) => (
                 <button
                   key={s.level}
                   type="button"
@@ -266,11 +344,11 @@ function AdminPanel({
                 type="button"
                 className="btn btn-ghost btn-small"
                 onClick={() => {
-                  const data = JSON.stringify(snapshot?.state ?? current.record!.state, null, 2);
-                  const url = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+                  const st = snapshot?.state ?? selected.record.state;
+                  const url = URL.createObjectURL(new Blob([JSON.stringify(st, null, 2)], { type: "application/json" }));
                   const a = document.createElement("a");
                   a.href = url;
-                  a.download = `${(current.record!.state.name || "personnage").replace(/[^\p{L}\p{N}-]+/gu, "-")}-niv${snapshot?.level ?? current.record!.state.level}.json`;
+                  a.download = `${(st.name || "personnage").replace(/[^\p{L}\p{N}-]+/gu, "-")}-niv${st.level}.json`;
                   a.click();
                   setTimeout(() => URL.revokeObjectURL(url), 1000);
                 }}
@@ -282,9 +360,9 @@ function AdminPanel({
                 className="btn btn-ghost btn-small pl-delete"
                 disabled={busy}
                 onClick={() => {
-                  if (confirm(`Supprimer la fiche de ${current.record!.state.name} et toutes ses copies ? Irréversible.`)) {
-                    void run(deleteCharacterAction(current.id));
-                    setSelected(null);
+                  if (confirm(`Supprimer la fiche de ${selected.record.state.name} et toutes ses copies ? Irréversible.`)) {
+                    void run(deleteCharacterAction(selected.record.id));
+                    setSel(null);
                   }
                 }}
               >
@@ -293,21 +371,23 @@ function AdminPanel({
             </div>
           </div>
 
-          {snapshot ? (
+          {snapshot || isArchived ? (
             <>
               <p className="muted small">
-                Copie en lecture seule, enregistrée le {new Date(snapshot.at).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })}.
+                {snapshot
+                  ? `Copie en lecture seule, enregistrée le ${new Date(snapshot.at).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })}.`
+                  : "Fiche archivée, en lecture seule."}
               </p>
               <Sheet
-                key={`snap-${snapshot.level}`}
-                record={{ ...current.record, state: snapshot.state as CharacterState }}
+                key={`ro-${selected.record.id}-${snapshot?.level ?? "now"}`}
+                record={snapshot ? { ...selected.record, state: snapshot.state } : selected.record}
                 editable={false}
                 canLevelUp={false}
                 onSave={async () => false}
               />
             </>
           ) : (
-            sheetFor(current.record, current.id)
+            sheetFor(selected.record)
           )}
         </section>
       )}
