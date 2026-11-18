@@ -78,6 +78,23 @@ Option `wide: true` dans le registre : page pleine largeur, sans carte ni titre 
   Une session retenue s'ajoute à l'agenda (fichier .ics).
 - Données : `polls` dans db.json. Les heures sont stockées telles quelles (heure locale de la table).
 
+## Fiche de personnage D&D 5.5 (`src/tools/character/`)
+
+- **Joueur** : crée son personnage avec un assistant (classe, espèce, historique, caractéristiques, compétences,
+  identité), puis utilise sa fiche : PV, dés de vie, jets contre la mort, emplacements de sorts, armes, équipement,
+  notes. Chaque notion a une bulle d'aide « ? ».
+- **Montée de niveau** : le MJ clique « Accorder le niveau N » dans l'outil. Le bouton « Monter de niveau » s'allume
+  sur le tableau de bord du joueur et ouvre un assistant (nouvelles capacités, PV moyens ou dé lancé par le serveur,
+  choix, récapitulatif). Niveau maximum : 4 (`MAX_LEVEL` dans `types.ts`).
+- **Copie du MJ** : la fiche est stockée dans `characters` (db.json / Redis), avec une copie à chaque niveau
+  (`snapshots`), consultable et téléchargeable (JSON) dans l'outil.
+- **Règles** : `rules.ts` calcule la fiche (modificateurs, CA, PV, sorts…) et valide la création et les montées de
+  niveau ; le serveur refait tous les calculs. Le joueur ne modifie librement que les champs de `FREE_FIELDS`.
+- **Données à relire** (résumés en français, sans garantie) : `data/classes.ts` (12 classes, niveaux 1 à 4, sous-classes,
+  choix), `data/origins.ts` (espèces, historiques), `data/feats.ts`, `data/equipment.ts`. Pour ajouter un choix à une
+  capacité, renseigner `choice` (`options`, `skills`, `expertise`, `subclass` ou `asi`) : création, montée de niveau et
+  validation le prennent en compte automatiquement.
+
 ## Administration
 
 - `/admin` : résumé, création de joueur, liste des joueurs (recherche dès 5 joueurs, clic sur le code pour le copier).

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import Spotlight from "@/components/Spotlight";
 import "./globals.css";
 
@@ -28,6 +29,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </div>
         <Spotlight />
         {children}
+        {/* Statistiques de visite Vercel (actives seulement une fois déployé sur Vercel). */}
+        <Analytics />
       </body>
     </html>
   );

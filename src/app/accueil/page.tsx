@@ -50,7 +50,7 @@ export default async function HomePage() {
             {widgets.map((t) => {
               const W = t.widget!.component;
               return (
-                <Widget key={t.id} title={t.widget!.title ?? t.name} icon={t.icon} href={`/outils/${t.id}`} wide={t.widget!.wide} transitionName={`tool-${t.id}`}>
+                <Widget key={t.id} title={(isAdmin && t.widget!.adminTitle) || t.widget!.title || t.name} icon={t.icon} href={`/outils/${t.id}`} wide={t.widget!.wide} transitionName={`tool-${t.id}`}>
                   <W user={user} />
                 </Widget>
               );

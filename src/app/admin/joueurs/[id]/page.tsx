@@ -120,7 +120,7 @@ export default async function PlayerPage({
         <section className="card stack danger-zone">
           <h2 className="subtitle">Zone dangereuse</h2>
           <p className="muted small">
-            Supprime le joueur, son code d&apos;accès, ses fiches d&apos;homunculus et son journal de dés. Irréversible.
+            Supprime le joueur, son code d&apos;accès, sa fiche de personnage, ses fiches d&apos;homunculus et son journal de dés. Irréversible.
           </p>
           <details className="danger">
             <summary>Supprimer {player.name}</summary>

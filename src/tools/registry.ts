@@ -7,6 +7,9 @@ import DiceRoller from "./dice/DiceRoller";
 import DiceWidget from "./dice/DiceWidget";
 import HomunculusTool from "./homunculus/HomunculusTool";
 import HomunculusWidget from "./homunculus/HomunculusWidget";
+import CharacterTool from "./character/CharacterTool";
+import CharacterWidget from "./character/CharacterWidget";
+import { CHARACTER_TOOL_ID } from "./character/types";
 import Planning from "./planning/Planning";
 import PlanningWidget from "./planning/PlanningWidget";
 import { PLANNING_TOOL_ID } from "./planning/types";
@@ -32,6 +35,8 @@ export type ToolWidget = {
   component: (props: { user: User }) => ReactNode | Promise<ReactNode>;
   /** Titre du panneau (par défaut : nom de l'outil). */
   title?: string;
+  /** Titre affiché au MJ, s'il diffère (ex. « Mon personnage » → « Personnages de la table »). */
+  adminTitle?: string;
   /** Occupe toute la largeur du tableau de bord. */
   wide?: boolean;
   /** Ordre d'affichage, du plus petit au plus grand (défaut 100). */
@@ -75,6 +80,15 @@ export const TOOLS: ToolDefinition[] = [
     icon: "📅",
     component: Planning,
     widget: { component: PlanningWidget, title: "Prochaines sessions", wide: true, order: 10 },
+  },
+  {
+    id: CHARACTER_TOOL_ID, // "personnage"
+    name: "Fiche de personnage",
+    description: "Ta fiche D&D (règles 2024) : création guidée, explications et montée de niveau pas à pas.",
+    icon: "🛡️",
+    component: CharacterTool,
+    wide: true,
+    widget: { component: CharacterWidget, title: "Mon personnage", adminTitle: "Personnages de la table", wide: true, order: 5 },
   },
   // { id: "mon-outil", name: "Mon outil", description: "…", icon: "🗺️", component: MonOutil, widget: { component: MonWidget } },
 ];

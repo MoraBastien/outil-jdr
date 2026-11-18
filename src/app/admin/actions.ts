@@ -85,6 +85,7 @@ export async function deletePlayer(formData: FormData): Promise<void> {
     db.users = db.users.filter((u) => u.id !== id);
     // Données d'outils liées au joueur.
     db.homunculi = (db.homunculi ?? []).filter((h) => h.ownerId !== id);
+    db.characters = (db.characters ?? []).filter((c) => c.ownerId !== id);
     db.diceLog = (db.diceLog ?? []).filter((d) => d.userId !== id);
     for (const poll of db.polls ?? []) delete poll.responses[id];
   });

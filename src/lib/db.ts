@@ -62,7 +62,26 @@ export type Poll = {
   updatedAt: string;
 };
 
-export type Db = { users: User[]; homunculi?: StoredHomunculus[]; diceLog?: DiceLogEntry[]; polls?: Poll[] };
+/** Fiche de personnage D&D (outil « personnage »). `state` = CharacterState sérialisé. */
+export type StoredCharacter = {
+  id: string;
+  ownerId: string;
+  state: unknown;
+  /** Niveau autorisé par le MJ (le joueur peut monter jusqu'à ce niveau). */
+  grantedLevel: number;
+  /** Copie de la fiche à chaque niveau atteint (archive du MJ). */
+  snapshots: { level: number; at: string; state: unknown }[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Db = {
+  users: User[];
+  homunculi?: StoredHomunculus[];
+  diceLog?: DiceLogEntry[];
+  polls?: Poll[];
+  characters?: StoredCharacter[];
+};
 
 // ---------------------------------------------------------------------------
 // Stockage
@@ -196,6 +215,14 @@ export async function getHomunculi(ownerId: string): Promise<StoredHomunculus[]>
 
 export async function getAllHomunculi(): Promise<StoredHomunculus[]> {
   return ((await load()).homunculi ?? []).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export async function getCharacters(): Promise<StoredCharacter[]> {
+  return (await load()).characters ?? [];
+}
+
+export async function getCharacter(ownerId: string): Promise<StoredCharacter | undefined> {
+  return ((await load()).characters ?? []).find((c) => c.ownerId === ownerId);
 }
 
 export async function getPolls(): Promise<Poll[]> {
