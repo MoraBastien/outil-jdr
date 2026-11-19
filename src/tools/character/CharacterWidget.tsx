@@ -4,6 +4,8 @@ import Link from "next/link";
 import { getCharacters, getGroups, getProposals, getUsers, type StoredCharacter, type User } from "@/lib/db";
 import { membersOf, visibleGroups } from "@/lib/groups";
 import { derive, fmtMod, shortLabel } from "./rules";
+import { entitySheetOf, type EntitySheetData } from "@/tools/homunculus/entity";
+import EntityConstellation, { litStars } from "@/tools/homunculus/astral/EntityConstellation";
 import { CHARACTER_TOOL_ID, MAX_LEVEL, type CharacterState } from "./types";
 
 const HREF = `/outils/${CHARACTER_TOOL_ID}`;
@@ -26,6 +28,24 @@ export default async function CharacterWidget({ user }: { user: User }) {
               ) : (
                 <ul className="pw-list cs-widget-roster">
                   {members.map((p) => {
+                    const entity = entitySheetOf(p);
+                    if (entity) {
+                      const active = chars.find((x) => x.ownerId === p.id && x.groupId === g.id && !x.deadAt && (x.state as CharacterState).extra);
+                      const hs = active?.state as CharacterState | undefined;
+                      return (
+                        <li key={p.id}>
+                          <Link href={HREF} className="pw-poll">
+                            <span className="stack-xs">
+                              <strong>{hs ? hs.name : entity.name || p.name}</strong>
+                              <span className="muted small">
+                                {hs ? `${p.name} · ${shortLabel(hs)} · homunculus de ${entity.name || "l'entité"}` : `${entity.name || "Entité"} · ${p.name} · aucun homunculus actif`}
+                              </span>
+                            </span>
+                            <span className="chip chip-violet">✨ Écho {entity.echo}</span>
+                          </Link>
+                        </li>
+                      );
+                    }
                     const c = chars.find((x) => x.ownerId === p.id && x.groupId === g.id && !x.deadAt);
                     const s = c?.state as CharacterState | undefined;
                     const proposal = !c && proposals.find((x) => x.ownerId === p.id && x.groupId === g.id && x.status === "pending");
@@ -50,6 +70,32 @@ export default async function CharacterWidget({ user }: { user: User }) {
                     );
                   })}
                 </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Joueur de l'Atelier : sa fiche est celle de son entité, la même dans tous ses groupes.
+  const entity = entitySheetOf(user);
+  if (entity) {
+    // Sous l'entité : l'homunculus actif de chaque groupe (fiche classique), ou une invitation à le choisir.
+    return (
+      <div className="cs-widget-groups">
+        <EntityLine sheet={entity} />
+        {groups.map((g) => {
+          const c = chars.find((x) => x.ownerId === user.id && x.groupId === g.id && !x.deadAt && (x.state as CharacterState).extra);
+          return (
+            <div key={g.id} className="stack-xs">
+              <span className="label">{groups.length > 1 ? `👥 ${g.name} · homunculus actif` : "Homunculus actif"}</span>
+              {c ? (
+                <CharacterLine c={c} groupId={g.id} />
+              ) : (
+                <Link href={HREF} className="cs-widget-hint">
+                  Choisir l&apos;homunculus qui rejoint le groupe
+                </Link>
               )}
             </div>
           );
@@ -90,7 +136,9 @@ export default async function CharacterWidget({ user }: { user: User }) {
 function CharacterLine({ c, groupId }: { c: StoredCharacter; groupId: string }) {
   const s = c.state as CharacterState;
   const d = derive(s);
-  const canLevelUp = c.grantedLevel > s.level;
+  // Fiche d'un homunculus : son niveau suit l'Écho, pas de montée de niveau ici.
+  const extra = Boolean(s.extra);
+  const canLevelUp = !extra && c.grantedLevel > s.level;
   const ready = c.prepared?.level === s.level + 1;
   const todo = c.foundryTodo?.items.filter((i) => !i.done).length ?? 0;
   const hpRatio = d.hpMax ? s.play.hp / d.hpMax : 0;
@@ -139,14 +187,37 @@ function CharacterLine({ c, groupId }: { c: StoredCharacter; groupId: string }) 
           ✦ Monter de niveau{ready && " · choix prêts"}
         </Link>
       )}
-      {!canLevelUp && todo > 0 && (
+      {!extra && !canLevelUp && todo > 0 && (
         <Link href={`${HREF}?groupe=${groupId}`} className="cs-widget-hint">
           🧭 {todo} chose{todo > 1 ? "s" : ""} à reporter dans Foundry
         </Link>
       )}
-      {!canLevelUp && todo === 0 && s.level < MAX_LEVEL && (
+      {!extra && !canLevelUp && todo === 0 && s.level < MAX_LEVEL && (
         <Link href={`${HREF}?groupe=${groupId}`} className="cs-widget-hint">
           {ready ? `✓ Choix du niveau ${s.level + 1} prêts` : `Préparer le niveau ${s.level + 1}`}
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/** Fiche de l'entité (TODO(entité) : fiche complète) : nom, niveau d'Écho et sa constellation. */
+function EntityLine({ sheet }: { sheet: EntitySheetData }) {
+  const lit = litStars(sheet.echo);
+  return (
+    <div className="cs-widget">
+      <Link href={HREF} className="entity-sky">
+        <EntityConstellation echo={sheet.echo} />
+        <span className="stack-xs">
+          <strong className="cs-widget-name">{sheet.name || "Entité sans nom"}</strong>
+          <span className="muted small">
+            Écho {sheet.echo} · {lit} étoile{lit > 1 ? "s" : ""} sur 8 rallumée{lit > 1 ? "s" : ""}
+          </span>
+        </span>
+      </Link>
+      {!sheet.name && (
+        <Link href={HREF} className="cs-widget-hint">
+          Donner un nom à ton entité
         </Link>
       )}
     </div>

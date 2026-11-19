@@ -149,7 +149,7 @@ function NewPollForm({
       <h2 className="subtitle">Nouveau sondage · {groupName}</h2>
       <label className="field">
         <span className="label">Titre</span>
-        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. One-shot « La chute de Rigel »" required maxLength={120} />
+        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. One-shot « La crypte oubliée »" required maxLength={120} />
       </label>
       <label className="field">
         <span className="label">Note pour les joueurs (facultatif)</span>

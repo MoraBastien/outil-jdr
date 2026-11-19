@@ -32,7 +32,7 @@ export default async function SheetPage({ params }: { params: Promise<{ id: stri
           Lecture seule · créée le {formatDate(stored.createdAt)} · modifiée le {formatDate(stored.updatedAt)}
         </p>
         <HomunculusCreator
-          className="homunculus-host"
+          className="hc-host"
           initialState={state}
           echo={state.echo}
           maxEcho={MAX_ECHO}

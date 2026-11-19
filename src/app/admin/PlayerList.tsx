@@ -100,7 +100,7 @@ export default function PlayerList({ players }: { players: PlayerRow[] }) {
                   </span>
                 ))
               )}
-              {p.echo != null && <span className="chip chip-accent">Écho {p.echo}</span>}
+              {p.echo != null && <span className="chip chip-accent">✨ Entité · Écho {p.echo}</span>}
             </div>
 
             <div className="player-meta muted small">

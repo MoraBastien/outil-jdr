@@ -79,7 +79,7 @@ export default function HomunculusTool({ player }: { player: ToolPlayer }) {
         </p>
       )}
       <HomunculusCreator
-        className="homunculus-host"
+        className="hc-host"
         echo={echo}
         maxEcho={MAX_ECHO}
         dice={serverDice}

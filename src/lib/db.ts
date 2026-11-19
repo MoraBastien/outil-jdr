@@ -6,6 +6,7 @@ import { randomUUID, randomInt } from "crypto";
 import { createClient } from "redis";
 
 export type Role = "admin" | "player";
+export type PlayerKind = "player" | "entity";
 
 export type ProfileField = { label: string; value: string };
 
@@ -18,6 +19,17 @@ export type User = {
   tools: string[];
   /** Écho de l'homunculus du joueur (Atelier de Rigel), fixé par le MJ. Absent = 1. */
   echo?: number;
+  /**
+   * Type de joueur. « entity » : le joueur incarne une entité (Atelier de Rigel, thème « Astre déchu », fiche de
+   * l'entité, homunculus actif). Absent : ancien compte, déduit de l'ancienne case « Atelier de Rigel » (voir entity.ts).
+   */
+  kind?: PlayerKind;
+  /**
+   * Joueurs de l'Atelier de Rigel : ils incarnent une entité qui crée des homunculus pour rejoindre le groupe.
+   * Leur « Fiche de personnage » est la fiche de l'entité (elle remplace la fiche D&D). Pour l'instant : le nom
+   * (ici) et l'Écho (`echo` ci-dessus). TODO(entité) : fiche complète quand les règles seront finies.
+   */
+  entitySheet?: { name: string; updatedAt: string };
   /** Groupes de jeu du joueur (voir `groups`). Donnent accès au planning et aux fiches de personnage. */
   groupIds?: string[];
   /**

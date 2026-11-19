@@ -5,9 +5,9 @@ import type { ComponentType, ReactNode } from "react";
 import type { User } from "@/lib/db";
 import DiceRoller from "./dice/DiceRoller";
 import DiceWidget from "./dice/DiceWidget";
-import HomunculusTool from "./homunculus/HomunculusTool";
+import HomunculusEntry from "./homunculus/HomunculusEntry";
 import HomunculusWidget from "./homunculus/HomunculusWidget";
-import CharacterTool from "./character/CharacterTool";
+import CharacterHost from "./character/CharacterHost";
 import CharacterWidget from "./character/CharacterWidget";
 import { CHARACTER_TOOL_ID } from "./character/types";
 import Planning from "./planning/Planning";
@@ -32,6 +32,8 @@ export type ToolPlayer = {
   isAdmin: boolean;
   /** Écho de l'homunculus (Atelier de Rigel), fixé par le MJ. */
   echo?: number;
+  /** Fiche de l'entité (joueurs de l'Atelier) : remplace la fiche D&D. Nom neutre, car visible dans le code client. */
+  altSheet?: { name: string; echo: number; atelierHref: string };
   profile: { fields: { label: string; value: string }[]; notes: string };
 };
 
@@ -98,7 +100,7 @@ export const TOOLS: ToolDefinition[] = [
     name: HOMUNCULUS_META.name,
     description: "Crée ton homunculus pour les one-shots de Rigel Sterne : matière, classe, dés, Anomalie, Fêlure.",
     icon: "✨",
-    component: HomunculusTool,
+    component: HomunculusEntry,
     section: "creation",
     short: "Atelier",
     wide: true,
@@ -119,7 +121,7 @@ export const TOOLS: ToolDefinition[] = [
     name: "Fiche de personnage",
     description: "Ta fiche D&D (règles 2024) : création guidée, explications et montée de niveau pas à pas.",
     icon: "🛡️",
-    component: CharacterTool,
+    component: CharacterHost,
     section: "campagne",
     short: "Fiche",
     wide: true,

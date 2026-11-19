@@ -78,6 +78,75 @@ Option `wide: true` dans le registre : page pleine largeur, sans carte ni titre 
   Le joueur ne peut pas le changer (vérifié aussi côté serveur). Le MJ, lui, choisit librement.
 - **Revue MJ** : la page du joueur liste ses fiches (étapes, relances) ; « Voir » les affiche en lecture seule.
 
+### Joueurs de type « Entité »
+
+L'Atelier n'est pas une case à cocher mais un **type de joueur** : « Joueur » ou « ✨ Entité », choisi par le MJ à la
+création du joueur ou sur sa page (`kind` dans db.json, règle `isEntityPlayer` dans `entity.ts`). Les anciens comptes
+sans `kind` qui avaient la case « Atelier de Rigel » sont traités comme des Entités, jusqu'au prochain enregistrement
+de leur page par le MJ.
+
+Une Entité n'incarne pas un héros mais une **entité** qui crée des homunculus pour rejoindre le groupe. Elle a donc :
+
+- ses **fiches d'homunculus**, dans l'Atelier ;
+- la **fiche de son entité**, qui remplace sa fiche D&D dans « Fiche de personnage » (dans tous ses groupes, et même
+  sans groupe). Pour l'instant : le **nom** (choisi par le joueur, `entitySheet` dans db.json) et le **niveau d'Écho**
+  (fixé par le MJ, champ `echo`). **TODO(entité)** : fiche complète quand les règles seront finies.
+
+Fichiers : `entity.ts` (règle `isAtelierPlayer`, côté serveur seulement), `entityActions.ts`, `EntitySheet.tsx`,
+et `src/tools/character/CharacterHost.tsx`, qui choisit entre les deux fiches. Côté MJ, l'entité apparaît dans la
+liste de chaque groupe (fiche et tableau de bord), sans bouton de niveau ni de création ; une ancienne fiche D&D du
+joueur passe dans les archives. Ce joueur ne peut ni créer de fiche D&D ni en proposer une depuis le coffre.
+
+**Les autres joueurs n'en ont pas connaissance.** Pour ça :
+
+- l'Écho et la fiche de l'entité ne sont envoyés au navigateur que pour les joueurs concernés ;
+- l'Atelier (`HomunculusEntry.tsx`) et la fiche de l'entité sont **chargés à la demande**, dans des fichiers à part.
+  Sinon leur code, avec leurs textes, finirait dans le JavaScript commun téléchargé par tout le monde ;
+- un composant client ne doit jamais importer `entity.ts` ni `homunculus-creator/meta.ts`. Les textes de la liste du
+  MJ viennent du serveur (`OtherSheet`), et les classes CSS globales ont des noms neutres (`hc-host`, `chip-violet`).
+
+Le **nom de l'entité** se modifie par le joueur (« Mon entité ») ou par le MJ (page du joueur, encadré « Entité et
+niveau d'Écho »). Le **coffre** reste ouvert à ces joueurs pour essayer des personnages D&D, mais sans « Proposer au MJ ».
+
+### L'homunculus actif (`src/tools/homunculus/transfer.ts`, `entityActions.ts`)
+
+Dans « Mon entité », le joueur choisit pour chaque groupe un **homunculus actif** parmi ses fiches **terminées** de
+l'Atelier. Il est **transféré dans une fiche de personnage classique** (la même que les autres joueurs) :
+
+- classe de l'Atelier → classe de la fiche (`CLASS_MAP`), niveau = Écho, caractéristiques finales, compétences
+  (`SKILL_MAP`) et expertises, PV calculés comme dans l'Atelier ; pas d'espèce ni d'historique ;
+- tous les passifs (Matière et sa Faiblesse, Anomalie, Fêlure, choix de classe, magie, maîtrises) sont listés dans
+  l'onglet **Capacités**, section « Capacités d'homunculus » (`state.extra`, textes écrits par le serveur) ;
+- son niveau **suit l'Écho** : pas de montée de niveau ni de « niveau pour tout le groupe ». Après une montée d'Écho,
+  le joueur met l'homunculus à jour dans l'Atelier puis clique « Mettre à jour depuis l'Atelier » (PV, équipement,
+  notes et nom sont gardés) ;
+- « Changer d'homunculus » remplace l'actif du groupe ; un même homunculus ne peut être actif que dans un groupe.
+
+Côté MJ, l'homunculus actif apparaît dans la liste du groupe comme un personnage, avec la pastille de l'entité, et
+**se déclare mort** comme les autres (cimetière, chronique). Un homunculus mort ne peut plus être réactivé : le joueur
+en choisit un autre. Pour les autres joueurs, c'est un personnage comme un autre (« Roublard · niv. 2 »), sans mention
+de l'Atelier.
+
+### Thème « Astre déchu » (`src/tools/homunculus/astral/`)
+
+Les joueurs de l'Atelier voient tout le site sous un thème à part : l'entité est un presque-dieu qui a perdu ses
+pouvoirs, et le site devient sa carte du ciel. **Chaque niveau d'Écho rallume une partie du ciel** : Écho 1 « cendre »
+(or terni, une étoile), 2 « lueur », 3 « éveil », 4 « ascension » (tout le ciel, étoiles filantes).
+
+- `theme.ts` : la feuille de style (`astralCss(echo)`), les glyphes de navigation (☉ ♄ ☽ ♃ ♀ ♇ ♁ ✶ ☿), les libellés
+  (« Observatoire », « Mon entité ») et le salut de l'accueil (« Ciel du 19 novembre · lune croissante »).
+- `src/app/s/perso.css/route.ts` : sert cette feuille **seulement** aux joueurs de l'Atelier (session vérifiée ; les
+  autres reçoivent une feuille vide). `Header.tsx` l'ajoute avec `<link precedence>` et `?e=<Écho>`.
+- **Toutes ses règles dépendent du marqueur `#astral-mark`**, rendu par `Header.tsx` pour une Entité seulement. React
+  garde une feuille `<link precedence>` chargée d'une page à l'autre, même après un changement de compte sans
+  rechargement : sans le marqueur, elle reste inerte et le thème ne déborde pas sur un autre joueur.
+- `AstralSky.tsx` : ciel animé en canvas. Il tourne lentement autour d'une étoile polaire (un tour en 12 min), avec trois
+  profondeurs d'étoiles qui scintillent, une nébuleuse qui respire et des étoiles filantes (en moyenne toutes les 20 s à
+  l'Écho 1, toutes les 4 s à l'Écho 4). ~30 images/s, en pause onglet caché, image fixe si « moins d'animations » ;
+  chargé à la demande par `SkyEntry.tsx`. `EntityConstellation.tsx` : la constellation de l'entité et son halo fendu
+  qui se referme à chaque Écho (accueil et « Mon entité »).
+- Le MJ garde le thème habituel.
+
 ## Groupes de jeu
 
 - Un groupe = une table / une campagne (`groups` dans db.json). Un joueur peut être dans plusieurs groupes

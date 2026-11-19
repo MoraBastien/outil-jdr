@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getUserById, type User } from "./db";
 import { getSessionUserId } from "./session";
 import { isAlwaysTool, isGroupTool, userGroupIds } from "./groups";
+import { ATELIER_TOOL_ID, isEntityPlayer } from "@/tools/homunculus/entity";
 
 export async function getCurrentUser(): Promise<User | null> {
   const id = await getSessionUserId();
@@ -27,6 +28,9 @@ export async function requireAdmin(): Promise<User> {
 export function canUseTool(user: User, toolId: string): boolean {
   if (user.role === "admin") return true;
   if (isAlwaysTool(toolId)) return true;
+  // L'Atelier est réservé aux joueurs de type Entité ; leur fiche (celle de l'entité) ne dépend pas d'un groupe.
+  if (toolId === ATELIER_TOOL_ID) return isEntityPlayer(user);
+  if (toolId === "personnage" && isEntityPlayer(user)) return true;
   if (isGroupTool(toolId)) return userGroupIds(user).length > 0;
   return user.tools.includes(toolId);
 }

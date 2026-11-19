@@ -538,6 +538,7 @@ a.pw-next:hover { color: var(--text); border-color: var(--ok); transform: transl
   padding: 14px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
 }
 .echo-box.disabled { opacity: 0.5; }
+.echo-entity { flex: 1 1 220px; max-width: 320px; }
 .segmented { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 999px; overflow: hidden; background: var(--surface-2); }
 .segmented label { position: relative; padding: 6px 16px; cursor: pointer; font-weight: 600; font-family: var(--font-mono); transition: background-color 0.15s; }
 .segmented label:hover { background: var(--surface-3); }
@@ -642,8 +643,8 @@ a.pw-next:hover { color: var(--text); border-color: var(--ok); transform: transl
 .pl-delete:hover { color: var(--danger); border-color: var(--danger); }
 .pl-archive summary { cursor: pointer; margin-bottom: 12px; }
 
-/* ---------- Atelier de Rigel (src/tools/homunculus-creator) : habillage aux couleurs du site ---------- */
-.hc-root.homunculus-host {
+/* ---------- Atelier (src/tools/homunculus-creator) : habillage aux couleurs du site ---------- */
+.hc-root.hc-host {
   --hc-font-display: var(--font-title);
   --hc-font-body: var(--font-body);
   border-radius: 20px;
@@ -651,7 +652,7 @@ a.pw-next:hover { color: var(--text); border-color: var(--ok); transform: transl
   overflow: clip; /* clip (et non hidden) : garde le position: sticky de la fiche */
 }
 @media (max-width: 600px) {
-  .hc-root.homunculus-host { padding: 18px 10px 24px; border-radius: 14px; }
+  .hc-root.hc-host { padding: 18px 10px 24px; border-radius: 14px; }
 }
 
 /* ==========================================================================
@@ -1700,3 +1701,8 @@ summary.pl-section-title { cursor: pointer; }
 .qs-steps li.ok span { color: var(--ok); }
 .qs-steps li.ko span { color: var(--danger); }
 button.qw-quest { width: 100%; font: inherit; text-align: left; cursor: pointer; }
+
+/* ---------- Petits utilitaires (noms neutres : la fiche de l'entité ne doit pas se deviner dans la feuille de style) ---------- */
+.cs-save-state.error { color: var(--danger); }
+.card-dashed { border-style: dashed; }
+.chip-violet { color: #c9b6ff; border-color: rgba(170, 140, 240, 0.45); }

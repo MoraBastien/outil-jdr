@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
-import { updateDb, normalizeCode, generateCode, randomUUID, type ProfileField, type User } from "@/lib/db";
+import { updateDb, normalizeCode, generateCode, randomUUID, type ProfileField, type User, type PlayerKind } from "@/lib/db";
 import { TOOLS } from "@/tools/registry";
 import { addMember, isAutoTool, removeMember } from "@/lib/groups";
 import { clampEcho } from "@/tools/homunculus/echo";
@@ -33,6 +33,7 @@ export async function createPlayer(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
   let code = String(formData.get("code") ?? "").trim();
   const groupId = String(formData.get("group") ?? "");
+  const kind: PlayerKind = formData.get("kind") === "entity" ? "entity" : "player";
   if (!name) back("/admin", { error: "Le nom est obligatoire." });
 
   const result = await updateDb((db): { error: string } | { id: string } => {
@@ -43,7 +44,7 @@ export async function createPlayer(formData: FormData): Promise<void> {
       return { error: `Le code « ${code} » est déjà utilisé.` };
     }
     const id = randomUUID();
-    const user: User = { id, name, code, role: "player", tools: [], groupIds: [], profile: { fields: [], notes: "" } };
+    const user: User = { id, name, code, role: "player", kind, tools: [], groupIds: [], profile: { fields: [], notes: "" } };
     db.users.push(user);
     if (groupId && (db.groups ?? []).some((g) => g.id === groupId)) addMember(db, user, groupId);
     return { id };
@@ -63,8 +64,11 @@ export async function updatePlayer(formData: FormData): Promise<void> {
   const tools = formData.getAll("tools").map(String).filter((t) => validIds.has(t) && !isAutoTool(t));
   const groupIds = formData.getAll("groups").map(String);
   const echo = clampEcho(formData.get("echo"));
+  const kind: PlayerKind = formData.get("kind") === "entity" ? "entity" : "player";
   const fields = parseFields(formData);
   const notes = String(formData.get("notes") ?? "");
+  // Nom de l'entité (joueurs de l'Atelier) : champ absent si l'Atelier n'était pas coché à l'affichage.
+  const entityName = formData.has("entityName") ? String(formData.get("entityName") ?? "").replace(/\s+/g, " ").trim().slice(0, 60) : null;
 
   if (!name || !code) back(playerPath(id), { error: "Le nom et le code sont obligatoires." });
 
@@ -72,7 +76,10 @@ export async function updatePlayer(formData: FormData): Promise<void> {
     const user = db.users.find((u) => u.id === id && u.role === "player");
     if (!user) return "Joueur introuvable.";
     if (codeTaken(db.users, code, id)) return `Le code « ${code} » est déjà utilisé.`;
-    Object.assign(user, { name, code, tools, echo, profile: { fields, notes } });
+    Object.assign(user, { name, code, tools, echo, kind, profile: { fields, notes } });
+    if (entityName !== null && entityName !== (user.entitySheet?.name ?? "")) {
+      user.entitySheet = entityName ? { name: entityName, updatedAt: new Date().toISOString() } : undefined;
+    }
     const valid = new Set((db.groups ?? []).map((g) => g.id));
     for (const g of [...(user.groupIds ?? [])]) if (!groupIds.includes(g)) removeMember(user, g);
     for (const g of groupIds) if (valid.has(g)) addMember(db, user, g);

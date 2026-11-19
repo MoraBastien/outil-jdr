@@ -9,8 +9,11 @@ export const isGroupTool = (toolId: string) => GROUP_TOOL_IDS.includes(toolId);
 /** Outils ouverts à tous les joueurs, sans case à cocher (le coffre à personnages). */
 export const ALWAYS_TOOL_IDS = ["coffre"];
 export const isAlwaysTool = (toolId: string) => ALWAYS_TOOL_IDS.includes(toolId);
+/** Outils liés au type de joueur « Entité » (l'Atelier de Rigel), sans case à cocher. */
+export const ENTITY_TOOL_IDS = ["homunculus-creator"];
+export const isEntityTool = (toolId: string) => ENTITY_TOOL_IDS.includes(toolId);
 /** Outils dont l'accès est automatique (pas de case à cocher dans l'admin). */
-export const isAutoTool = (toolId: string) => isGroupTool(toolId) || isAlwaysTool(toolId);
+export const isAutoTool = (toolId: string) => isGroupTool(toolId) || isAlwaysTool(toolId) || isEntityTool(toolId);
 
 export const userGroupIds = (user: Pick<User, "groupIds">) => user.groupIds ?? [];
 

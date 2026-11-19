@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import Flash from "@/components/Flash";
 import CountUp from "@/components/CountUp";
 import { clampEcho } from "@/tools/homunculus/echo";
-import { TOOL_META as HOMUNCULUS_META } from "@/tools/homunculus-creator/meta";
+import { isEntityPlayer } from "@/tools/homunculus/entity";
 import { addGroupMember, createGroup, createPlayer, deleteGroup, removeGroupMember, renameGroup } from "./actions";
 import PlayerList, { type PlayerRow } from "./PlayerList";
 import PageMain from "@/components/PageMain";
@@ -29,7 +29,7 @@ export default async function AdminPage({
         id: p.id,
         name: p.name,
         code: p.code,
-        echo: p.tools.includes(HOMUNCULUS_META.id) ? clampEcho(p.echo) : null,
+        echo: isEntityPlayer(p) ? clampEcho(p.echo) : null,
         tools: TOOLS.filter((t) => !isAutoTool(t.id) && p.tools.includes(t.id)).map((t) => ({ id: t.id, name: t.name, icon: t.icon })),
         groups: userGroupIds(p).flatMap((g) => (groupName.has(g) ? [groupName.get(g)!] : [])),
         sheets: sheets.length,
@@ -94,6 +94,10 @@ export default async function AdminPage({
                 ))}
               </select>
             )}
+            <select name="kind" className="input" aria-label="Type de joueur" defaultValue="player">
+              <option value="player">Joueur</option>
+              <option value="entity">✨ Entité</option>
+            </select>
             <button className="btn">+ Créer</button>
           </form>
         </section>

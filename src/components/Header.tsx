@@ -4,6 +4,9 @@ import { canUseTool } from "@/lib/auth";
 import { getUsers, type User } from "@/lib/db";
 import { NAV_SECTIONS, TOOLS } from "@/tools/registry";
 import AppNav, { type NavGroup, type NavItem } from "./AppNav";
+import { entitySheetOf } from "@/tools/homunculus/entity";
+import { ASTRAL_LABELS, NAV_GLYPHS } from "@/tools/homunculus/astral/theme";
+import SkyEntry from "@/tools/homunculus/astral/SkyEntry";
 
 /** Ordre d'affichage des outils (les plus utilisés d'abord, c'est aussi l'ordre de la barre mobile). */
 const PRIORITY = ["personnage", "planning", "chronique", "quetes", "cimetiere", "coffre", "homunculus-creator", "des"];
@@ -12,9 +15,18 @@ const rank = (id: string) => (PRIORITY.includes(id) ? PRIORITY.indexOf(id) : PRI
 export default async function Header({ user }: { user: User }) {
   const isAdmin = user.role === "admin";
   const tools = TOOLS.filter((t) => canUseTool(user, t.id)).sort((a, b) => rank(a.id) - rank(b.id));
-  const toItem = (t: (typeof tools)[number]): NavItem => ({ href: `/outils/${t.id}`, label: t.name, short: t.short, icon: t.icon, hint: t.description });
+  // Joueur de l'Atelier : thème « Astre déchu » (glyphes planétaires, « Observatoire », « Mon entité »).
+  const entity = entitySheetOf(user);
+  const toItem = (t: (typeof tools)[number]): NavItem => {
+    const item = { href: `/outils/${t.id}`, label: t.name, short: t.short, icon: t.icon, hint: t.description };
+    if (!entity) return item;
+    const own = t.id === "personnage" ? { label: ASTRAL_LABELS.personnage, short: "Entité", hint: "La fiche de ton entité : nom et niveau d'Écho." } : {};
+    return { ...item, icon: NAV_GLYPHS[t.id] ?? item.icon, ...own };
+  };
 
-  const home: NavItem = { href: "/accueil", label: "Tableau de bord", short: "Accueil", icon: "⌂", hint: "Ton résumé : personnages, sessions, cimetière." };
+  const home: NavItem = entity
+    ? { href: "/accueil", label: ASTRAL_LABELS.home, short: "Ciel", icon: NAV_GLYPHS.home, hint: "Ton ciel : ton entité, tes homunculus, les séances." }
+    : { href: "/accueil", label: "Tableau de bord", short: "Accueil", icon: "⌂", hint: "Ton résumé : personnages, sessions, cimetière." };
   const groups: NavGroup[] = [
     { label: null, items: [home] },
     ...NAV_SECTIONS.map((s) => ({ label: s.label, items: tools.filter((t) => t.section === s.id).map(toItem) })).filter((g) => g.items.length > 0),
@@ -34,5 +46,16 @@ export default async function Header({ user }: { user: User }) {
         .sort((a, b) => a.label.localeCompare(b.label, "fr"))
     : [];
 
-  return <AppNav groups={groups} primary={primary} players={players} user={{ name: isAdmin ? "Maître du jeu" : user.name, role: isAdmin ? "MJ" : "Joueur" }} />;
+  const nav = <AppNav groups={groups} primary={primary} players={players} user={{ name: isAdmin ? "Maître du jeu" : user.name, role: isAdmin ? "MJ" : "Joueur" }} />;
+  if (!entity) return nav;
+  return (
+    <>
+      {/* Feuille servie seulement à ce joueur (route qui vérifie la session) ; ?e= la renouvelle quand l'Écho change. */}
+      <link rel="stylesheet" href={`/s/perso.css?e=${entity.echo}`} precedence="high" />
+      {/* Active le thème : sans ce marqueur (autre compte, autre page), la feuille ci-dessus reste inerte. */}
+      <span id="astral-mark" hidden />
+      <SkyEntry level={entity.echo} />
+      {nav}
+    </>
+  );
 }

@@ -149,12 +149,18 @@ export default function Sheet({
           ) : (
             <h2 className="cs-name">{s.name}</h2>
           )}
+          {s.extra ? (
+            <p className="cs-sub">
+              <b>{cls.name}</b> · niveau {s.level} · {s.extra.tag}
+            </p>
+          ) : (
           <p className="cs-sub">
             {species?.name}
             {s.speciesOptions.lineage && ` (${species?.options?.find((o) => o.key === "lineage")?.options.find((o) => o.id === s.speciesOptions.lineage)?.name})`} ·{" "}
             <b>{cls.name}</b>
             {sub && ` · ${sub.name}`} · niveau {s.level} · {bg?.name}
           </p>
+          )}
         </div>
         <div className="cs-banner-actions">
           {canLevelUp && onLevelUp && (
@@ -393,6 +399,22 @@ export default function Sheet({
 
         {tab === "features" && (
           <div className="stack-lg">
+            {s.extra && (
+              <Section title={s.extra.title}>
+                <ul className="cs-features">
+                  {s.extra.features.map((f, i) => (
+                    <li key={`${i}-${f.name}`}>
+                      <div className="stack-xs">
+                        <strong>
+                          {f.name} <span className="chip chip-violet">{f.source}</span>
+                        </strong>
+                        <span className="muted">{f.desc}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            )}
             <Section title={`Capacités de ${cls.name.toLowerCase()}`} hint="Ce que ta classe te permet de faire. Clique sur « ? » pour un conseil.">
               <ol className="cs-features">
                 {d.features.map((f) => (
@@ -410,6 +432,7 @@ export default function Sheet({
                 ))}
               </ol>
             </Section>
+            {species && (
             <Section title={`Traits d'espèce · ${species?.name}`}>
               <ul className="cs-features">
                 {species?.traits.map((t) => (
@@ -436,6 +459,8 @@ export default function Sheet({
                 })}
               </ul>
             </Section>
+            )}
+            {(s.feats.length > 0 || !s.extra) && (
             <Section title="Dons" hint="Des talents particuliers. Ton historique t'en donne un au niveau 1.">
               <ul className="cs-features">
                 {s.feats.map((f) => {
@@ -454,6 +479,7 @@ export default function Sheet({
                 })}
               </ul>
             </Section>
+            )}
           </div>
         )}
 

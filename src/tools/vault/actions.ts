@@ -12,6 +12,7 @@ import { toCampaignState } from "@/tools/character/proposal";
 import { RuleError, applyLevelUp, averageHp, buildCharacter, sanitizeFree, type CreationInput } from "@/tools/character/rules";
 import { MAX_LEVEL, type Answers, type CharacterRecord, type CharacterState } from "@/tools/character/types";
 import { VAULT_TOOL_ID } from "./meta";
+import { isEntityPlayer } from "@/tools/homunculus/entity";
 
 const MAX_DRAFTS = 30;
 
@@ -41,7 +42,8 @@ const toEntry = (c: StoredCharacter, user: User): VaultEntry => ({
 
 async function data(user: User): Promise<VaultData> {
   const [vault, allGroups, chars, proposals] = await Promise.all([getVault(user.id), getGroups(), getCharacters(), getProposals()]);
-  const groups = user.role === "admin" ? [] : visibleGroups(user, allGroups);
+  // MJ et joueurs de l'Atelier (leur fiche de campagne est celle de leur entité) : rien à proposer.
+  const groups = user.role === "admin" || isEntityPlayer(user) ? [] : visibleGroups(user, allGroups);
   return {
     entries: vault.map((c) => toEntry(c, user)),
     groups: groups.map((g) => {
@@ -198,6 +200,7 @@ export async function proposeDraftAction(draftId: string, groupId: string, messa
   const user = await requireToolUser();
   return guard(user, async () => {
     if (user.role !== "player") throw new RuleError("Seuls les joueurs proposent des personnages.");
+    if (isEntityPlayer(user)) throw new RuleError("Ta fiche de campagne ne vient pas du coffre.");
     await updateDb((db) => {
       const draft = mine(db.vault, user, draftId);
       const group = (db.groups ?? []).find((g) => g.id === groupId);

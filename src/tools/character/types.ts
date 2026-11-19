@@ -119,6 +119,23 @@ export type CharacterState = {
   };
 
   history: LevelUpEntry[];
+
+  /**
+   * Fiche venue d'un autre outil (l'homunculus actif d'un joueur de l'Atelier, voir tools/homunculus/transfer.ts).
+   * Pas d'espèce ni d'historique ; ses passifs s'ajoutent à l'onglet Capacités. Le niveau suit l'Écho :
+   * pas de montée de niveau ici. Les textes sont écrits par le serveur (le code client reste neutre).
+   */
+  extra?: ExtraOrigin;
+};
+
+export type ExtraOrigin = {
+  /** Identifiant de la fiche d'origine (pour la mise à jour et pour ne pas la réactiver après sa mort). */
+  sourceId: string;
+  /** Sous-titre du bandeau, à la place de l'espèce et de l'historique. */
+  tag: string;
+  /** Titre de la section des passifs dans l'onglet Capacités. */
+  title: string;
+  features: { name: string; desc: string; source: string }[];
 };
 
 export type CharacterRecord = {

@@ -2,12 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { getUserById, getHomunculi, getGroups } from "@/lib/db";
-import { isAlwaysTool, isGroupTool, userGroupIds } from "@/lib/groups";
+import { isAlwaysTool, isEntityTool, isGroupTool, userGroupIds } from "@/lib/groups";
 import { TOOLS } from "@/tools/registry";
 import Header from "@/components/Header";
 import Flash from "@/components/Flash";
 import { clampEcho, MAX_ECHO } from "@/tools/homunculus/echo";
-import { TOOL_META as HOMUNCULUS_META } from "@/tools/homunculus-creator/meta";
+import { isEntityPlayer } from "@/tools/homunculus/entity";
 import { deletePlayer, deleteHomunculus } from "../../actions";
 import { summarize, formatDate } from "../../homunculus";
 import PlayerEditor, { type EditorPlayer } from "./PlayerEditor";
@@ -33,6 +33,8 @@ export default async function PlayerPage({
     name: player.name,
     code: player.code,
     echo: clampEcho(player.echo),
+    kind: isEntityPlayer(player) ? "entity" : "player",
+    entityName: player.entitySheet?.name ?? "",
     tools: player.tools,
     groupIds: userGroupIds(player),
     fields: player.profile.fields,
@@ -57,9 +59,8 @@ export default async function PlayerPage({
           // Réinitialise l'état local (dont « non enregistré ») après chaque enregistrement.
           key={JSON.stringify(editorPlayer) + (ok ?? "")}
           player={editorPlayer}
-          tools={TOOLS.map((t) => ({ id: t.id, name: t.name, icon: t.icon, description: t.description, byGroup: isGroupTool(t.id), always: isAlwaysTool(t.id) }))}
+          tools={TOOLS.map((t) => ({ id: t.id, name: t.name, icon: t.icon, description: t.description, byGroup: isGroupTool(t.id), always: isAlwaysTool(t.id), byKind: isEntityTool(t.id) }))}
           groups={groups.map((g) => ({ id: g.id, name: g.name }))}
-          homunculusToolId={HOMUNCULUS_META.id}
           maxEcho={MAX_ECHO}
         />
 
@@ -73,9 +74,9 @@ export default async function PlayerPage({
 
           {sheets.length === 0 ? (
             <p className="muted">
-              {player.tools.includes(HOMUNCULUS_META.id)
+              {isEntityPlayer(player)
                 ? "Aucune fiche enregistrée pour l'instant."
-                : "L'Atelier de Rigel n'est pas autorisé pour ce joueur."}
+                : "L'Atelier de Rigel est réservé aux joueurs de type Entité."}
             </p>
           ) : (
             <ul className="sheet-list">

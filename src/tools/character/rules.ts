@@ -673,7 +673,8 @@ export function sanitizeFree(current: CharacterState, patch: Partial<CharacterSt
 export function shortLabel(s: CharacterState): string {
   const cls = getClass(s.classId);
   const species = getSpecies(s.speciesId);
-  return `${species?.name ?? ""} ${cls?.name.toLowerCase() ?? ""} · niv. ${s.level}`.trim();
+  if (!species) return `${cls?.name ?? ""} · niv. ${s.level}`.trim();
+  return `${species.name} ${cls?.name.toLowerCase() ?? ""} · niv. ${s.level}`.trim();
 }
 
 export { CLASSES, FEATS };

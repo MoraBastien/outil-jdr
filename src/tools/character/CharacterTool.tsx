@@ -328,10 +328,12 @@ function AdminPanel({
   }
 
   /** `archivedLabel` : fiche hors groupe (lecture seule, pas de montée de niveau). */
-  const rosterItem = (key: string, name: string, entry: AdminEntry | null, onCreate?: () => void, archivedLabel?: string, proposal?: PendingProposal | null) => {
+  /** `chip` : pastille fournie par le serveur (fiche d'un autre type). */
+  const rosterItem = (key: string, name: string, entry: AdminEntry | null, onCreate?: () => void, archivedLabel?: string, proposal?: PendingProposal | null, chip?: string) => {
     const r = entry?.record;
     const pending = r && r.grantedLevel > r.state.level;
-    const live = r && archivedLabel === undefined;
+    // Fiche venue d'un autre outil : son niveau ne s'accorde pas ici.
+    const live = r && archivedLabel === undefined && !r.state.extra;
     return (
       <li key={key} className={`cs-roster-item${r && selected?.record.id === r.id ? " on" : ""}`}>
         <button type="button" className="cs-roster-main" onClick={() => r && pick(r.id)} disabled={!r}>
@@ -345,6 +347,7 @@ function AdminPanel({
           </span>
         </button>
         <div className="cs-roster-actions">
+          {chip && <span className="chip chip-violet">{chip}</span>}
           {!r && proposal && (
             <button type="button" className="btn btn-small" onClick={() => setSel({ kind: "proposal", proposalId: proposal.id })}>
               🗝️ Examiner la proposition
@@ -395,7 +398,7 @@ function AdminPanel({
         // Personnages qui recevraient un niveau avec le bouton « tout le groupe ».
         const eligible = g.members.flatMap((m) => {
           const r = m.entry?.record;
-          return r && r.state.level < MAX_LEVEL && r.grantedLevel <= r.state.level ? [r] : [];
+          return r && !r.state.extra && r.state.level < MAX_LEVEL && r.grantedLevel <= r.state.level ? [r] : [];
         });
         return (
         <section key={g.id} className="stack">
@@ -420,13 +423,30 @@ function AdminPanel({
           ) : (
             <ul className="cs-roster">
               {g.members.map((m) =>
-                rosterItem(
+                m.other && !m.entry ? (
+                  // Fiche d'un autre type (textes fournis par le serveur) : rien à créer ni à accorder ici.
+                  <li key={`${g.id}-${m.id}`} className="cs-roster-item">
+                    <span className="cs-roster-main">
+                      <span className="avatar avatar-lg" aria-hidden="true">
+                        {m.other.title.charAt(0).toUpperCase()}
+                      </span>
+                      <span className="stack-xs">
+                        <strong>{m.other.title}</strong>
+                        <span className="muted small">{m.other.sub}</span>
+                      </span>
+                    </span>
+                    <div className="cs-roster-actions">
+                      <span className="chip chip-violet">{m.other.chip}</span>
+                    </div>
+                  </li>
+                ) : rosterItem(
                   `${g.id}-${m.id}`,
                   m.name,
                   m.entry,
-                  () => setSel({ kind: "create", ownerId: m.id, ownerName: m.name, groupId: g.id, groupName: g.name }),
+                  m.other ? undefined : () => setSel({ kind: "create", ownerId: m.id, ownerName: m.name, groupId: g.id, groupName: g.name }),
                   undefined,
                   m.proposal,
+                  m.other?.chip,
                 ),
               )}
             </ul>

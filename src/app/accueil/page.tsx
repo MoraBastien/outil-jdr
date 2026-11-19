@@ -3,8 +3,9 @@ import { TOOLS } from "@/tools/registry";
 import Header from "@/components/Header";
 import Widget from "@/components/Widget";
 import { clampEcho } from "@/tools/homunculus/echo";
-import { TOOL_META as HOMUNCULUS_META } from "@/tools/homunculus-creator/meta";
 import PageMain from "@/components/PageMain";
+import { entitySheetOf, isEntityPlayer } from "@/tools/homunculus/entity";
+import { ASTRAL_LABELS, NAV_GLYPHS, skyLine } from "@/tools/homunculus/astral/theme";
 
 function greeting(): string {
   const hour = Number(new Intl.DateTimeFormat("fr-FR", { hour: "numeric", hour12: false, timeZone: "Europe/Paris" }).format(new Date()));
@@ -23,18 +24,21 @@ export default async function HomePage() {
   const { notes } = user.profile;
   // L'Écho (Atelier de Rigel) s'affiche dans le profil des joueurs qui ont l'outil.
   const fields =
-    !isAdmin && user.tools.includes(HOMUNCULUS_META.id)
+    !isAdmin && isEntityPlayer(user)
       ? [{ label: "Écho", value: String(clampEcho(user.echo)) }, ...user.profile.fields]
       : user.profile.fields;
   const hasProfile = fields.length > 0 || notes.trim() !== "";
+  // Joueur de l'Atelier : thème « Astre déchu » (salut céleste, nom de l'entité, glyphes, « Mon entité »).
+  const entity = entitySheetOf(user);
+  const titleOf = (id: string, title: string) => (entity && id === "personnage" ? ASTRAL_LABELS.personnage : title);
 
   return (
     <>
       <Header user={user} />
       <PageMain className="page page-dash stack-lg">
         <section className="hero">
-          <p className="eyebrow">{greeting()}</p>
-          <h1 className="title">{isAdmin ? "Maître du jeu" : user.name}</h1>
+          <p className="eyebrow">{entity ? skyLine() : greeting()}</p>
+          <h1 className="title">{isAdmin ? "Maître du jeu" : entity?.name || user.name}</h1>
         </section>
 
         {tools.length === 0 && !hasProfile ? (
@@ -49,7 +53,7 @@ export default async function HomePage() {
             {widgets.map(({ t, w, key }) => {
               const W = w.component;
               return (
-                <Widget key={key} title={(isAdmin && w.adminTitle) || w.title || t.name} icon={w.icon ?? t.icon} href={`/outils/${t.id}`} wide={w.wide} transitionName={`tool-${key}`}>
+                <Widget key={key} title={titleOf(t.id, (isAdmin && w.adminTitle) || w.title || t.name)} icon={(entity && NAV_GLYPHS[t.id]) || w.icon || t.icon} href={`/outils/${t.id}`} wide={w.wide} transitionName={`tool-${key}`}>
                   <W user={user} />
                 </Widget>
               );

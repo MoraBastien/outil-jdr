@@ -10,6 +10,7 @@ import { membersOf, userGroupIds, visibleGroups } from "@/lib/groups";
 import { getClass } from "./data/classes";
 import { foundryChecklist } from "./foundry";
 import { RuleError, applyLevelUp, averageHp, buildCharacter, sanitizeFree, shortLabel, type CreationInput } from "./rules";
+import { entitySheetOf, isEntityPlayer } from "@/tools/homunculus/entity";
 import { CHARACTER_TOOL_ID, MAX_LEVEL, type Answers, type CharacterRecord, type CharacterState, type HpMode } from "./types";
 
 type Snapshot = { level: number; at: string; state: CharacterState };
@@ -19,6 +20,11 @@ export type AdminEntry = { record: CharacterRecord; snapshots: Snapshot[]; dead?
 export type MyProposal = { name: string; label: string; status: "pending" | "refused"; reason: string };
 /** MJ : proposition en attente d'un membre sans personnage. */
 export type PendingProposal = { id: string; state: CharacterState; message: string; createdAt: string };
+/**
+ * MJ : membre dont la fiche n'est pas une fiche D&D (l'entité d'un joueur de l'Atelier). Les textes viennent
+ * du serveur pour que le code client, commun à tous les joueurs, ne contienne rien qui la trahisse.
+ */
+export type OtherSheet = { title: string; sub: string; chip: string };
 export type LevelUpOutcome = { hpDie: number; rolled: boolean; summary: string[]; foundry: string[] };
 
 export type CharacterView = {
@@ -32,7 +38,7 @@ export type CharacterView = {
     proposal: MyProposal | null;
   }[];
   /** MJ : chaque groupe, ses membres et leur fiche dans ce groupe (ou leur proposition en attente). */
-  groups: { id: string; name: string; members: { id: string; name: string; entry: AdminEntry | null; proposal: PendingProposal | null }[] }[];
+  groups: { id: string; name: string; members: { id: string; name: string; entry: AdminEntry | null; proposal: PendingProposal | null; other: OtherSheet | null }[] }[];
   /** MJ : fiches hors groupe (groupe supprimé, joueur retiré du groupe, anciennes fiches). */
   archived: (AdminEntry & { groupName: string | null })[];
 };
@@ -101,11 +107,23 @@ async function view(user: User): Promise<CharacterView> {
     id: g.id,
     name: g.name,
     members: membersOf(users, g.id).map((m) => {
-      const c = find(m.id, g.id);
+      // Joueur de l'Atelier : sa fiche est celle de son entité ; une ancienne fiche D&D passe dans les archives.
+      const entity = entitySheetOf(m);
+      // Joueur de l'Atelier : son personnage dans le groupe est son homunculus actif (fiche avec `extra`).
+      const c = entity
+        ? chars.find((x) => x.ownerId === m.id && x.groupId === g.id && !x.deadAt && (x.state as CharacterState).extra)
+        : find(m.id, g.id);
       if (c) placed.add(c.id);
       const p = c ? undefined : proposals.find((x) => x.ownerId === m.id && x.groupId === g.id && x.status === "pending");
       const proposal: PendingProposal | null = p ? { id: p.id, state: p.state as CharacterState, message: p.message, createdAt: p.createdAt } : null;
-      return { id: m.id, name: m.name, entry: c ? toEntry(c, users, graves) : null, proposal };
+      const other: OtherSheet | null = entity
+        ? {
+            title: entity.name || m.name,
+            sub: `${entity.name ? `${m.name} · entité` : "Entité pas encore nommée"} · aucun homunculus actif`,
+            chip: `✨ ${entity.name || "Entité"} · Écho ${entity.echo}`,
+          }
+        : null;
+      return { id: m.id, name: m.name, entry: c ? toEntry(c, users, graves) : null, proposal, other };
     }),
   }));
   const groupName = new Map(allGroups.map((g) => [g.id, g.name]));
@@ -155,6 +173,7 @@ export async function createCharacterAction(input: CreationInput, groupId: strin
     await updateDb((db) => {
       if (!(db.groups ?? []).some((g) => g.id === groupId)) throw new RuleError("Groupe introuvable.");
       const target = db.users.find((u) => u.id === owner && u.role === "player");
+      if (target && isEntityPlayer(target)) throw new RuleError("Ce joueur incarne une entité : sa fiche n'est pas une fiche D&D.");
       if (!target || !userGroupIds(target).includes(groupId)) throw new RuleError("Ce joueur ne fait pas partie de ce groupe.");
       const list = (db.characters ??= []);
       if (list.some((c) => c.ownerId === owner && c.groupId === groupId && !c.deadAt)) throw new RuleError("Ce joueur a déjà une fiche dans ce groupe.");
@@ -184,6 +203,7 @@ export async function levelUpAction(characterId: string, answers: Answers, hpMod
     await updateDb((db) => {
       const c = editable(db, user, characterId);
       const state = c.state as CharacterState;
+      if (state.extra) throw new RuleError("Le niveau de ce personnage suit l'Écho de son joueur.");
       if (c.grantedLevel <= state.level) throw new RuleError("Ton MJ ne t'a pas encore accordé de niveau.");
       const hitDie = getClass(state.classId)?.hitDie ?? 8;
       const rolled = hpMode === "roll";
@@ -209,6 +229,7 @@ export async function grantLevelAction(characterId: string, level: number): Prom
     if (user.role !== "admin") throw new RuleError("Réservé au MJ.");
     await updateDb((db) => {
       const c = editable(db, user, characterId);
+      if ((c.state as CharacterState).extra) throw new RuleError("Le niveau de ce personnage suit l'Écho de son joueur.");
       const current = (c.state as CharacterState).level;
       c.grantedLevel = Math.min(MAX_LEVEL, Math.max(current, Math.round(level)));
       c.updatedAt = new Date().toISOString();
@@ -226,7 +247,7 @@ export async function grantGroupLevelAction(groupId: string): Promise<ActionResu
     if (user.role !== "admin") throw new RuleError("Réservé au MJ.");
     await updateDb((db) => {
       if (!(db.groups ?? []).some((g) => g.id === groupId)) throw new RuleError("Groupe introuvable.");
-      const members = new Set(membersOf(db.users, groupId).map((u) => u.id));
+      const members = new Set(membersOf(db.users, groupId).filter((u) => !isEntityPlayer(u)).map((u) => u.id));
       const now = new Date().toISOString();
       let n = 0;
       for (const c of db.characters ?? []) {
@@ -260,6 +281,7 @@ export async function prepareLevelUpAction(characterId: string, answers: Answers
     await updateDb((db) => {
       const c = editable(db, user, characterId);
       const state = c.state as CharacterState;
+      if (state.extra) throw new RuleError("Le niveau de ce personnage suit l'Écho de son joueur.");
       if (state.level >= MAX_LEVEL) throw new RuleError(`Le niveau maximum est ${MAX_LEVEL}.`);
       const clean = cleanAnswers(answers);
       // Vérification avec la moyenne : lève une RuleError si un choix manque ou est invalide.
@@ -305,6 +327,7 @@ export async function acceptProposalAction(proposalId: string): Promise<ActionRe
       const p = (db.proposals ?? []).find((x) => x.id === proposalId && x.status === "pending");
       if (!p) throw new RuleError("Proposition introuvable.");
       const owner = db.users.find((u) => u.id === p.ownerId && u.role === "player");
+      if (owner && isEntityPlayer(owner)) throw new RuleError("Ce joueur incarne une entité : sa fiche n'est pas une fiche D&D.");
       if (!owner || !userGroupIds(owner).includes(p.groupId)) throw new RuleError("Ce joueur ne fait plus partie de ce groupe.");
       const list = (db.characters ??= []);
       if (list.some((c) => c.ownerId === p.ownerId && c.groupId === p.groupId && !c.deadAt)) throw new RuleError("Ce joueur a déjà une fiche dans ce groupe.");

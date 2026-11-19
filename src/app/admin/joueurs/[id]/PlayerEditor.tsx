@@ -11,13 +11,17 @@ export type EditorPlayer = {
   name: string;
   code: string;
   echo: number;
+  /** Type de joueur : « entity » donne l'Atelier, la fiche de l'entité et le thème « Astre déchu ». */
+  kind: "player" | "entity";
+  /** Nom de l'entité (joueurs de l'Atelier), modifiable par le joueur et par le MJ. */
+  entityName: string;
   tools: string[];
   groupIds: string[];
   fields: { label: string; value: string }[];
   notes: string;
 };
 
-export type EditorTool = { id: string; name: string; icon: string; description: string; byGroup?: boolean; always?: boolean };
+export type EditorTool = { id: string; name: string; icon: string; description: string; byGroup?: boolean; always?: boolean; byKind?: boolean };
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // sans 0/O, 1/I/L
 
@@ -40,13 +44,11 @@ export default function PlayerEditor({
   player,
   tools,
   groups,
-  homunculusToolId,
   maxEcho,
 }: {
   player: EditorPlayer;
   tools: EditorTool[];
   groups: { id: string; name: string }[];
-  homunculusToolId: string;
   maxEcho: number;
 }) {
   const [code, setCode] = useState(player.code);
@@ -85,7 +87,8 @@ export default function PlayerEditor({
     setDirty(true);
   };
 
-  const hasHomunculus = selected.includes(homunculusToolId);
+  const [kind, setKind] = useState(player.kind);
+  const hasHomunculus = kind === "entity";
 
   return (
     <form action={updatePlayer} className="stack-lg" onChange={() => setDirty(true)}>
@@ -125,6 +128,27 @@ export default function PlayerEditor({
               </button>
             </div>
             <span className="muted small">Le joueur se connecte avec ce code. Le changer le déconnecte de fait.</span>
+          </div>
+          <div className="field">
+            <span className="label">Type de joueur</span>
+            <div className="segmented" role="radiogroup" aria-label="Type de joueur">
+              {(
+                [
+                  ["player", "Joueur"],
+                  ["entity", "✨ Entité"],
+                ] as const
+              ).map(([k, label]) => (
+                <label key={k} className={kind === k ? "on" : ""}>
+                  <input type="radio" name="kind" value={k} checked={kind === k} onChange={() => setKind(k)} />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <span className="muted small">
+              {kind === "entity"
+                ? "Incarne une entité : Atelier de Rigel, fiche de l'entité avec son homunculus actif, et son propre thème."
+                : "Joueur classique, avec sa fiche de personnage D&D."}
+            </span>
           </div>
         </div>
       </section>
@@ -169,14 +193,31 @@ export default function PlayerEditor({
                 </div>
               );
             }
+            if (t.byKind) {
+              return (
+                <div key={t.id} className={`tool-toggle auto${hasHomunculus ? " on" : ""}`}>
+                  <span className="tool-icon">{t.icon}</span>
+                  <span className="stack-xs">
+                    <strong>{t.name}</strong>
+                    <span className="muted small">{hasHomunculus ? "Automatique : le joueur est une Entité." : "Réservé aux joueurs de type Entité."}</span>
+                  </span>
+                </div>
+              );
+            }
             if (t.byGroup) {
-              const on = memberOf.length > 0;
+              // Avec l'Atelier de Rigel, la fiche de personnage devient la fiche de l'entité (sans condition de groupe).
+              const entity = t.id === "personnage" && hasHomunculus;
+              const on = entity || memberOf.length > 0;
               return (
                 <div key={t.id} className={`tool-toggle auto${on ? " on" : ""}`}>
                   <span className="tool-icon">{t.icon}</span>
                   <span className="stack-xs">
                     <strong>{t.name}</strong>
-                    <span className="muted small">{on ? "Automatique : le joueur est dans un groupe." : "Bloqué : le joueur n'est dans aucun groupe."}</span>
+                    <span className="muted small">{entity
+                        ? "Fiche de l'entité et de son homunculus actif, car le joueur est une Entité."
+                        : on
+                          ? "Automatique : le joueur est dans un groupe."
+                          : "Bloqué : le joueur n'est dans aucun groupe."}</span>
                   </span>
                 </div>
               );
@@ -205,13 +246,19 @@ export default function PlayerEditor({
 
         <div className={`echo-box${hasHomunculus ? "" : " disabled"}`}>
           <div className="stack-xs">
-            <span className="label">Écho de l&apos;homunculus</span>
+            <span className="label">Entité et niveau d&apos;Écho</span>
             <span className="muted small">
               {hasHomunculus
-                ? "Niveau imposé dans l'Atelier de Rigel. Monte d'un cran quand l'objectif du one-shot est réussi."
-                : "Utilisé seulement si l'Atelier de Rigel est autorisé."}
+                ? "Le joueur incarne une entité. Son Écho est imposé dans l'Atelier de Rigel et monte d'un cran quand l'objectif du one-shot est réussi."
+                : "Utilisé seulement pour les joueurs de type Entité."}
             </span>
           </div>
+          {hasHomunculus && (
+            <label className="field echo-entity">
+              <span className="label">Nom de l&apos;entité</span>
+              <input className="input" name="entityName" defaultValue={player.entityName} maxLength={60} placeholder="Le joueur peut aussi le choisir" />
+            </label>
+          )}
           <div className="segmented" role="radiogroup" aria-label="Écho">
             {Array.from({ length: maxEcho }, (_, i) => i + 1).map((n) => (
               <label key={n} className={echo === n ? "on" : ""}>
