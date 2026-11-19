@@ -136,6 +136,8 @@ export type ExtraOrigin = {
   /** Titre de la section des passifs dans l'onglet Capacités. */
   title: string;
   features: { name: string; desc: string; source: string }[];
+  /** Petite note affichée au-dessus de la fiche (coffre), écrite par le serveur. */
+  note?: string;
 };
 
 export type CharacterRecord = {

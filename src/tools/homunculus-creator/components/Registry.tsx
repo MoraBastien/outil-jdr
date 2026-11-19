@@ -12,7 +12,7 @@ export function Registry({ fiches, onLoad, onRemove }: Props) {
   return (
     <section className="hc-reg">
       <h2>Registre</h2>
-      <p className="hc-hint">Les fiches enregistrées restent dans ce navigateur uniquement.</p>
+      <p className="hc-hint">Tes homunculus sauvegardés. Charges-en un pour le reprendre dans la cuve.</p>
       {fiches.length === 0 ? (
         <p className="hc-empty">Aucune fiche enregistrée.</p>
       ) : (

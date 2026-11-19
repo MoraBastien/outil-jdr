@@ -4,7 +4,7 @@
 // Écho imposé par le MJ, jets comparés au journal.
 
 import { requireUser, canUseTool } from "@/lib/auth";
-import { updateDb, getHomunculi, getDiceLog, type User } from "@/lib/db";
+import { updateDb, getHomunculi, getDiceLog, randomUUID, type User } from "@/lib/db";
 import {
   TOOL_META,
   FELURES,
@@ -15,6 +15,11 @@ import {
   type HomunculusState,
 } from "@/tools/homunculus-creator/server";
 import { clampEcho, MAX_ECHO } from "./echo";
+import { homunculusToCharacter } from "./transfer";
+import type { CharacterState } from "@/tools/character/types";
+
+/** Nombre maximum d'essais dans le coffre (même limite que le coffre). */
+const MAX_VAULT = 30;
 
 // (Un fichier "use server" ne peut exporter que des fonctions async.)
 const HOMUNCULUS_TOOL_ID = TOOL_META.id;
@@ -52,7 +57,8 @@ export async function listHomunculiAction(): Promise<HomunculusState[]> {
   return (await getHomunculi(user.id)).map((h) => h.state as HomunculusState);
 }
 
-export type SaveResult = { ok: true } | { ok: false; error: string };
+/** `vault` : ce qui est arrivé dans le coffre (envoyé, mis à jour, ou pas encore car l'homunculus n'est pas terminé). */
+export type SaveResult = { ok: true; vault: "sent" | "updated" | "incomplete" | "full" } | { ok: false; error: string };
 
 export async function saveHomunculusAction(input: HomunculusState): Promise<SaveResult> {
   const user = await requireToolUser();
@@ -101,7 +107,8 @@ export async function saveHomunculusAction(input: HomunculusState): Promise<Save
     }
     return null;
   });
-  return error ? { ok: false, error } : { ok: true };
+  if (error) return { ok: false, error };
+  return { ok: true, vault: await sendToVault(user, state) };
 }
 
 export async function removeHomunculusAction(id: string): Promise<void> {
@@ -109,4 +116,35 @@ export async function removeHomunculusAction(id: string): Promise<void> {
   await updateDb((db) => {
     db.homunculi = (db.homunculi ?? []).filter((h) => !(h.id === id && h.ownerId === user.id));
   });
+}
+
+/**
+ * Envoie un homunculus terminé dans le coffre du joueur, sous forme de fiche de personnage classique
+ * (voir transfer.ts). Une sauvegarde suivante met à jour la même fiche en gardant ce que le joueur y a rempli.
+ */
+async function sendToVault(user: User, h: HomunculusState): Promise<"sent" | "updated" | "incomplete" | "full"> {
+  if (!derive(h).complete) return "incomplete";
+  let outcome: "sent" | "updated" | "incomplete" | "full" = "incomplete";
+  await updateDb((db) => {
+    const vault = (db.vault ??= []);
+    const existing = vault.find((c) => c.ownerId === user.id && (c.state as CharacterState).extra?.sourceId === h.id);
+    const state = homunculusToCharacter(h, existing?.state as CharacterState | undefined);
+    if ("error" in state) return;
+    const now = new Date().toISOString();
+    if (existing) {
+      if ((existing.state as CharacterState).level !== state.level) existing.snapshots = [{ level: state.level, at: now, state }];
+      existing.state = state;
+      existing.grantedLevel = state.level;
+      existing.updatedAt = now;
+      outcome = "updated";
+      return;
+    }
+    if (vault.filter((c) => c.ownerId === user.id).length >= MAX_VAULT) {
+      outcome = "full";
+      return;
+    }
+    vault.push({ id: randomUUID(), ownerId: user.id, state, grantedLevel: state.level, snapshots: [{ level: state.level, at: now, state }], createdAt: now, updatedAt: now });
+    outcome = "sent";
+  });
+  return outcome;
 }

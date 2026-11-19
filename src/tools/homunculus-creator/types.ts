@@ -175,6 +175,8 @@ export interface HomunculusCreatorProps {
   /** Si fourni, affiche un bouton d'envoi, actif quand la création est complète. */
   onSubmit?: (state: HomunculusState, derived: DerivedSheet) => void | Promise<void>;
   submitLabel?: string;
+  /** Libellé du bouton de sauvegarde affiché sous la cuve (si un stockage est disponible). */
+  saveLabel?: string;
   readOnly?: boolean;
   theme?: "auto" | "dark" | "light";
   /** Affiche des nébuleuses floues derrière les panneaux (utile si le site hôte a un fond uni). */

@@ -108,12 +108,15 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
   if (open) {
     const { record, levels } = open;
     const level = record.state.level;
+    // Fiche venue d'un autre outil : son niveau ne se règle pas ici (note écrite par le serveur).
+    const extra = record.state.extra;
     return (
       <div className="cs-root stack-lg">
         <div className="vault-bar">
           <button type="button" className="btn btn-ghost btn-small" onClick={() => (setScreen({ kind: "list" }), setLevelUpOpen(false), setProposeOpen(false))}>
             ← Retour au coffre
           </button>
+          {!extra && (
           <div className="vault-levels" role="group" aria-label="Niveau de l'essai">
             <span className="label">Niveau</span>
             {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map((n) => {
@@ -140,6 +143,7 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
               );
             })}
           </div>
+          )}
           <div className="pl-actions">
             {groups.length > 0 && (
               <button type="button" className="btn btn-small" onClick={() => setProposeOpen((o) => !o)} aria-expanded={proposeOpen}>
@@ -165,7 +169,7 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
           </div>
         </div>
         <p className="muted small vault-note">
-          🗝️ Essai du coffre : tu choisis toi-même ton niveau, et tu peux revenir en arrière à tout moment. Rien ici n&apos;affecte tes fiches de campagne.
+          {extra?.note ?? "🗝️ Essai du coffre : tu choisis toi-même ton niveau, et tu peux revenir en arrière à tout moment. Rien ici n'affecte tes fiches de campagne."}
         </p>
         {errorBox}
         <ProposalStatus draftId={record.id} groups={groups} busy={busy} onWithdraw={(g) => run(withdrawProposalAction(g))} />
@@ -185,7 +189,7 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
           key={record.id}
           record={record}
           editable
-          canLevelUp={level < MAX_LEVEL}
+          canLevelUp={!extra && level < MAX_LEVEL}
           onLevelUp={() => setLevelUpOpen(true)}
           onSave={async (patch) => Boolean((await run(saveDraftAction(record.id, patch)))?.ok)}
         />
@@ -238,6 +242,7 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
             </span>
             <strong className="vault-name">{record.state.name}</strong>
             <span className="muted small">{shortLabel(record.state)}</span>
+            {record.state.extra && <span className="muted small">{record.state.extra.tag}</span>}
             <span className="muted small">Modifié le {new Date(record.updatedAt).toLocaleDateString("fr-FR")}</span>
             {groups
               .filter((g) => g.proposal?.draftId === record.id)

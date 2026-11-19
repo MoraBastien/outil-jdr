@@ -77,6 +77,12 @@ Option `wide: true` dans le registre : page pleine largeur, sans carte ni titre 
 - **Écho** : le MJ le fixe sur la page du joueur (`/admin/joueurs/<id>`, champ `echo` dans db.json, 1 par défaut).
   Le joueur ne peut pas le changer (vérifié aussi côté serveur). Le MJ, lui, choisit librement.
 - **Revue MJ** : la page du joueur liste ses fiches (étapes, relances) ; « Voir » les affiche en lecture seule.
+- **Sauvegarder · envoyer au coffre** : le bouton sous la cuve (ou collé en bas de l'écran sur téléphone) enregistre
+  l'homunculus et, s'il est **terminé**, l'envoie dans le **coffre** du joueur sous forme de fiche de personnage
+  classique (`sendToVault` dans `homunculus/actions.ts`, conversion par `transfer.ts`). Les sauvegardes suivantes
+  mettent à jour la même fiche du coffre : niveau, caractéristiques et capacités viennent de l'Atelier, l'équipement,
+  les PV, les notes et les textes déjà écrits par le joueur sont gardés. Dans le coffre, cette fiche n'a ni montée ni
+  retour de niveau (son niveau suit l'Écho). Un homunculus pas encore terminé est seulement enregistré dans l'Atelier.
 
 ### Joueurs de type « Entité »
 
@@ -137,9 +143,13 @@ pouvoirs, et le site devient sa carte du ciel. **Chaque niveau d'Écho rallume u
   (« Observatoire », « Mon entité ») et le salut de l'accueil (« Ciel du 19 novembre · lune croissante »).
 - `src/app/s/perso.css/route.ts` : sert cette feuille **seulement** aux joueurs de l'Atelier (session vérifiée ; les
   autres reçoivent une feuille vide). `Header.tsx` l'ajoute avec `<link precedence>` et `?e=<Écho>`.
-- **Toutes ses règles dépendent du marqueur `#astral-mark`**, rendu par `Header.tsx` pour une Entité seulement. React
-  garde une feuille `<link precedence>` chargée d'une page à l'autre, même après un changement de compte sans
-  rechargement : sans le marqueur, elle reste inerte et le thème ne déborde pas sur un autre joueur.
+- **Toutes ses règles dépendent de l'attribut `html[data-astral]`**, posé pour une Entité seulement : par un petit
+  script en ligne de `Header.tsx` au premier chargement (pas de clignotement), puis par `SkyEntry.tsx`, qui le retire
+  quand il disparaît. React garde une feuille `<link precedence>` chargée d'une page à l'autre, même après un
+  changement de compte sans rechargement : sans l'attribut, elle reste inerte. (Un `html:has(#marqueur)` faisait
+  recalculer les styles de toute la page à chaque changement du DOM.)
+- **Pas de flou d'arrière-plan** (`backdrop-filter`) sur ce qui passe au-dessus du ciel ou de la cuve : ils sont animés,
+  le flou serait recalculé à chaque image (page figée sur les appareils modestes).
 - `AstralSky.tsx` : ciel animé en canvas. Il tourne lentement autour d'une étoile polaire (un tour en 12 min), avec trois
   profondeurs d'étoiles qui scintillent, une nébuleuse qui respire et des étoiles filantes (en moyenne toutes les 20 s à
   l'Écho 1, toutes les 4 s à l'Écho 4). ~30 images/s, en pause onglet caché, image fixe si « moins d'animations » ;

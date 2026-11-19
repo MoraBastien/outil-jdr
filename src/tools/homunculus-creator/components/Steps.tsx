@@ -1,4 +1,5 @@
-import type { Dispatch, ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
+import { MATIERE_VISUALS, sigilPolylines } from "../data/forge";
 import { ANOMALIES } from "../data/anomalies";
 import { CLASSES } from "../data/classes";
 import { COMPETENCES } from "../data/competences";
@@ -9,18 +10,28 @@ import { allCompetences, asiPoints, asiUsed, competenceNom, finalStat, getClasse
 import type { Action } from "../lib/state";
 import type { DerivedSheet, HomunculusState } from "../types";
 
+/** Étape terminée, étape en cours (la première à faire) ou étape à venir. */
+export type StepStatus = "done" | "current" | "todo";
+
 interface StepProps {
   state: HomunculusState;
   derived: DerivedSheet;
   dispatch: Dispatch<Action>;
+  status?: StepStatus;
 }
 
-export function Step({ n, title, hint, children }: { n: number; title: string; hint?: string; children: ReactNode }) {
+export function Step({ n, title, hint, status = "todo", children }: { n: number; title: string; hint?: string; status?: StepStatus; children: ReactNode }) {
   return (
-    <section className="hc-step">
+    <section className={`hc-step hc-s-${status}`} aria-current={status === "current" ? "step" : undefined}>
+      <span className="hc-node" aria-hidden="true">
+        <svg viewBox="-12 -12 24 24">
+          <path d="M0-11 2.6-2.6 11 0 2.6 2.6 0 11-2.6 2.6-11 0-2.6-2.6Z" />
+        </svg>
+        <i>{status === "done" ? "✓" : n}</i>
+      </span>
       <h2>
-        <span className="hc-num">{n}</span>
         {title}
+        {status === "done" && <span className="hc-done">forgé</span>}
       </h2>
       {hint && <p className="hc-hint">{hint}</p>}
       {children}
@@ -28,10 +39,54 @@ export function Step({ n, title, hint, children }: { n: number; title: string; h
   );
 }
 
-export function EchoStep({ state, derived, dispatch, maxEcho, locked }: StepProps & { maxEcho: number; locked: boolean }) {
+/** Petit sceau de classe (le même que dans la cuve). */
+export function Sigil({ classeId, size = 18 }: { classeId: string; size?: number }) {
+  const lines = sigilPolylines(classeId, 10);
+  return (
+    <svg className="hc-sigil" viewBox="-12 -12 24 24" width={size} height={size} aria-hidden="true">
+      {lines.map((l, i) => (
+        <polyline key={i} points={l.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")} />
+      ))}
+    </svg>
+  );
+}
+
+/** Dé qui roule quelques instants avant de montrer sa valeur, à chaque nouveau tirage. */
+function RollingDie({ value, roll, sides, delay = 0, className = "hc-die" }: { value: number; roll: number; sides: number; delay?: number; className?: string }) {
+  const [shown, setShown] = useState(value);
+  const [rolling, setRolling] = useState(false);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setShown(value);
+      return;
+    }
+    setRolling(true);
+    const start = performance.now();
+    const id = setInterval(() => {
+      if (performance.now() - start > 520 + delay) {
+        clearInterval(id);
+        setShown(value);
+        setRolling(false);
+      } else setShown(1 + Math.floor(Math.random() * sides));
+    }, 55);
+    return () => clearInterval(id);
+  }, [value, roll, sides, delay]);
+  return (
+    <span className={className + (rolling ? " hc-rolling" : " hc-landed")} style={{ animationDelay: `${delay}ms` }}>
+      {shown}
+    </span>
+  );
+}
+
+export function EchoStep({ state, derived, dispatch, maxEcho, locked, status }: StepProps & { maxEcho: number; locked: boolean }) {
   const asi = derived.asi;
   return (
-    <Step n={1} title="Écho" hint="L'Écho du Maître fixe le niveau de l'homunculus. Il ne monte jamais en cours de mission. Les matières se débloquent par palier : 1-2, puis 3-4.">
+    <Step n={1} status={status} title="Écho" hint="L'Écho du Maître fixe le niveau de l'homunculus. Il ne monte jamais en cours de mission. Les matières se débloquent par palier : 1-2, puis 3-4.">
       <div className="hc-seg">
         {Array.from({ length: maxEcho }, (_, i) => i + 1).map((e) => (
           <button key={e} type="button" aria-pressed={state.echo === e} disabled={locked && state.echo !== e} onClick={() => dispatch({ type: "setEcho", echo: e, maxEcho })}>
@@ -46,11 +101,11 @@ export function EchoStep({ state, derived, dispatch, maxEcho, locked }: StepProp
   );
 }
 
-export function MatiereStep({ state, dispatch }: Omit<StepProps, "derived">) {
+export function MatiereStep({ state, dispatch, status }: Omit<StepProps, "derived">) {
   const paliers = Array.from(new Set(MATIERES.map((m) => m.palier)));
   const sel = getMatiere(state.matiereId);
   return (
-    <Step n={2} title="Corps : la matière" hint="Remplace la race. Chaque matière apporte une capacité et une faiblesse. Les matières d'un palier supérieur à l'Écho sont verrouillées.">
+    <Step n={2} status={status} title="Corps : la matière" hint="Remplace la race. Chaque matière apporte une capacité et une faiblesse. Les matières d'un palier supérieur à l'Écho sont verrouillées.">
       {paliers.map((pal) => {
         const list = MATIERES.filter((m) => m.palier === pal);
         const lock = list[0].echoMin > state.echo;
@@ -62,7 +117,16 @@ export function MatiereStep({ state, dispatch }: Omit<StepProps, "derived">) {
             </p>
             <div className="hc-mtiles">
               {list.map((m) => (
-                <button key={m.id} type="button" className="hc-mtile" aria-pressed={state.matiereId === m.id} disabled={lock} onClick={() => dispatch({ type: "setMatiere", id: m.id })}>
+                <button
+                  key={m.id}
+                  type="button"
+                  className="hc-mtile hc-matter"
+                  aria-pressed={state.matiereId === m.id}
+                  disabled={lock}
+                  onClick={() => dispatch({ type: "setMatiere", id: m.id })}
+                  style={{ "--mc": MATIERE_VISUALS[m.id]?.core, "--me": MATIERE_VISUALS[m.id]?.edge, "--mg": MATIERE_VISUALS[m.id]?.glow } as CSSProperties}
+                >
+                  <span className="hc-orb" aria-hidden="true" />
                   <span className="hc-tag">{m.type}</span>
                   <b>{m.nom}</b>
                 </button>
@@ -97,14 +161,15 @@ export function MatiereStep({ state, dispatch }: Omit<StepProps, "derived">) {
   );
 }
 
-export function ClasseStep({ state, dispatch }: Omit<StepProps, "derived">) {
+export function ClasseStep({ state, dispatch, status }: Omit<StepProps, "derived">) {
   const c = getClasse(state.classeId);
   const comps = allCompetences(state);
   return (
-    <Step n={3} title="Classe" hint="Une classe D&D 5e, au niveau de l'Écho. Choisis ses compétences et ses options : tout ce qu'elle donne est listé ci-dessous.">
+    <Step n={3} status={status} title="Classe" hint="Une classe D&D 5e, au niveau de l'Écho. Choisis ses compétences et ses options : tout ce qu'elle donne est listé ci-dessous.">
       <div className="hc-chips">
         {CLASSES.map((cl) => (
-          <button key={cl.id} type="button" className="hc-chip" aria-pressed={state.classeId === cl.id} onClick={() => dispatch({ type: "setClasse", id: cl.id })}>
+          <button key={cl.id} type="button" className="hc-chip hc-class" aria-pressed={state.classeId === cl.id} onClick={() => dispatch({ type: "setClasse", id: cl.id })}>
+            <Sigil classeId={cl.id} />
             {cl.nom}
             <i>d{cl.dv}</i>
           </button>
@@ -117,6 +182,7 @@ export function ClasseStep({ state, dispatch }: Omit<StepProps, "derived">) {
       ) : (
         <div className="hc-mdetail" style={{ marginTop: 14 }}>
           <h3>
+            <Sigil classeId={c.id} size={30} />
             {c.nom}
             <span>
               Écho {state.echo} · d{c.dv}
@@ -214,11 +280,11 @@ export function ClasseStep({ state, dispatch }: Omit<StepProps, "derived">) {
   );
 }
 
-export function StatsStep({ state, dispatch, onRoll, busy, error }: Omit<StepProps, "derived"> & { onRoll: () => void; busy: boolean; error: string | null }) {
+export function StatsStep({ state, dispatch, onRoll, busy, error, status }: Omit<StepProps, "derived"> & { onRoll: () => void; busy: boolean; error: string | null }) {
   const asi = asiPoints(state.echo);
   const left = asi - asiUsed(state);
   return (
-    <Step n={4} title="Caractéristiques" hint="Six jets de 4d5 (un d10 divisé par 2, arrondi au supérieur) en retirant le plus bas, à répartir sur les caractéristiques. Moyenne d'environ 10, maximum 15. Les relances restent comptées sur la fiche.">
+    <Step n={4} status={status} title="Caractéristiques" hint="Six jets de 4d5 (un d10 divisé par 2, arrondi au supérieur) en retirant le plus bas, à répartir sur les caractéristiques. Moyenne d'environ 10, maximum 15. Les relances restent comptées sur la fiche.">
       <div className="hc-actions">
         <button type="button" className="hc-btn" onClick={onRoll} disabled={busy}>
           {busy ? "Lancer…" : state.jets ? "Relancer les six jets" : "Lancer les dés"}
@@ -233,7 +299,7 @@ export function StatsStep({ state, dispatch, onRoll, busy, error }: Omit<StepPro
         <>
           <div className="hc-pool">
             {state.pool.map((v, i) => (
-              <span className="hc-die" key={i}>{v}</span>
+              <RollingDie key={i} value={v} roll={state.jets} sides={15} delay={i * 70} />
             ))}
           </div>
           {asi > 0 && (
@@ -278,9 +344,9 @@ export function StatsStep({ state, dispatch, onRoll, busy, error }: Omit<StepPro
   );
 }
 
-export function AnomalieStep({ state, dispatch }: Omit<StepProps, "derived">) {
+export function AnomalieStep({ state, dispatch, status }: Omit<StepProps, "derived">) {
   return (
-    <Step n={5} title="Anomalie" hint="Remplace le background : un passif fixe, plus deux compétences au choix. Ce que la cuve a laissé de travers.">
+    <Step n={5} status={status} title="Anomalie" hint="Remplace le background : un passif fixe, plus deux compétences au choix. Ce que la cuve a laissé de travers.">
       <div className="hc-opts">
         {ANOMALIES.map((a) => (
           <button key={a.id} type="button" className="hc-opt" aria-pressed={state.anomalieId === a.id} onClick={() => dispatch({ type: "setAnomalie", id: a.id })}>
@@ -308,11 +374,11 @@ export function AnomalieStep({ state, dispatch }: Omit<StepProps, "derived">) {
   );
 }
 
-export function FelureStep({ state, onRoll, busy, error }: Omit<StepProps, "derived" | "dispatch"> & { onRoll: () => void; busy: boolean; error: string | null }) {
+export function FelureStep({ state, onRoll, busy, error, status }: Omit<StepProps, "derived" | "dispatch"> & { onRoll: () => void; busy: boolean; error: string | null }) {
   const idx = FELURES.findIndex((f) => f.id === state.felureId);
   const f = idx >= 0 ? FELURES[idx] : null;
   return (
-    <Step n={6} title="Fêlure" hint="Un détail de personnalité tiré au d20. Fait pour le plaisir de jouer, pas pour punir.">
+    <Step n={6} status={status} title="Fêlure" hint="Un détail de personnalité tiré au d20. Fait pour le plaisir de jouer, pas pour punir.">
       <button type="button" className="hc-btn" onClick={onRoll} disabled={busy}>
         {f == null ? "Tirer la Fêlure (d20)" : "Relancer la Fêlure"}
       </button>
@@ -320,7 +386,9 @@ export function FelureStep({ state, onRoll, busy, error }: Omit<StepProps, "deri
       {state.felJets > 1 && <p className="hc-note">Relances utilisées : {state.felJets - 1}. Elles figurent sur la fiche.</p>}
       {f && (
         <div className="hc-fel">
-          <span className="hc-n">d20 = {idx + 1}</span>
+          <span className="hc-n">
+            d20 = <RollingDie value={idx + 1} roll={state.felJets} sides={20} className="hc-d20" />
+          </span>
           <br />
           <b>{f.nom}</b>
           <p style={{ margin: "4px 0 0" }}>{f.description}</p>
@@ -338,10 +406,10 @@ export function FelureStep({ state, onRoll, busy, error }: Omit<StepProps, "deri
   );
 }
 
-export function IdentiteStep({ state, dispatch, readOnly }: Omit<StepProps, "derived"> & { readOnly: boolean }) {
+export function IdentiteStep({ state, dispatch, readOnly, status }: Omit<StepProps, "derived"> & { readOnly: boolean }) {
   const set = (field: "nom" | "marque" | "mission") => (e: { target: { value: string } }) => dispatch({ type: "setField", field, value: e.target.value });
   return (
-    <Step n={7} title="Identité" hint="Les ordres du Maître arrivent sans visage ni nom. Le nom de l'homunculus, lui, se garde.">
+    <Step n={7} status={status} title="Identité" hint="Les ordres du Maître arrivent sans visage ni nom. Le nom de l'homunculus, lui, se garde.">
       <div className="hc-field">
         <label className="hc-label" htmlFor="hc-nom">Nom</label>
         <input id="hc-nom" type="text" autoComplete="off" maxLength={60} value={state.nom} onChange={set("nom")} readOnly={readOnly} />

@@ -42,13 +42,22 @@ export default function HomunculusTool({ player }: { player: ToolPlayer }) {
       async save(state) {
         try {
           const r = await saveHomunculusAction(state);
+          const name = `« ${state.nom.trim() || "sans nom"} »`;
           setFlash(
-            r.ok
-              ? { kind: "ok", text: `Fiche « ${state.nom.trim() || "sans nom"} » enregistrée.` }
-              : { kind: "error", text: r.error },
+            !r.ok
+              ? { kind: "error", text: r.error }
+              : r.vault === "sent"
+                ? { kind: "ok", text: `${name} est sauvegardé et envoyé dans ton coffre.` }
+                : r.vault === "updated"
+                  ? { kind: "ok", text: `${name} est sauvegardé ; sa fiche du coffre est à jour.` }
+                  : r.vault === "full"
+                    ? { kind: "error", text: `${name} est sauvegardé, mais ton coffre est plein (30 essais) : fais-y de la place pour l'y envoyer.` }
+                    : { kind: "ok", text: `${name} est sauvegardé. Il rejoindra ton coffre une fois terminé.` },
           );
-        } catch {
-          setFlash({ kind: "error", text: "L'enregistrement a échoué. Réessaie." });
+          if (!r.ok) throw new Error(r.error);
+        } catch (e) {
+          setFlash((f) => (f?.kind === "error" ? f : { kind: "error", text: "L'enregistrement a échoué. Réessaie." }));
+          throw e;
         }
       },
       async remove(id) {
@@ -84,6 +93,7 @@ export default function HomunculusTool({ player }: { player: ToolPlayer }) {
         maxEcho={MAX_ECHO}
         dice={serverDice}
         storage={storage}
+        saveLabel="Sauvegarder · envoyer au coffre"
         theme="dark"
         ambient
       />

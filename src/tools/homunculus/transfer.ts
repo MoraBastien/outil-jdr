@@ -121,13 +121,23 @@ export function homunculusToCharacter(h: HomunculusState, keep?: CharacterState)
     classChoices: {},
     // Même calcul que l'Atelier : dé de vie au niveau 1, puis la moyenne arrondie (dv/2 + 1) par niveau.
     hpRolls: Array.from({ length: level - 1 }, () => classe.dv / 2 + 1),
-    identity: keep?.identity ?? {
-      alignment: "",
-      appearance: h.marque ? `Marque : ${h.marque}` : "",
-      personality: felure ? `${felure.nom} : ${felure.description}` : "",
-      backstory: h.mission ? `Mission : ${h.mission}` : "",
+    // Textes de l'Atelier ; un champ déjà rempli par le joueur dans la fiche est gardé.
+    identity: {
+      alignment: keep?.identity.alignment ?? "",
+      appearance: keep?.identity.appearance || (h.marque ? `Marque : ${h.marque}` : ""),
+      personality: keep?.identity.personality || (felure ? `${felure.nom} : ${felure.description}` : ""),
+      backstory: keep?.identity.backstory || (h.mission ? `Mission : ${h.mission}` : ""),
+      ...(keep?.identity.ideals ? { ideals: keep.identity.ideals } : {}),
+      ...(keep?.identity.bonds ? { bonds: keep.identity.bonds } : {}),
+      ...(keep?.identity.flaws ? { flaws: keep.identity.flaws } : {}),
     },
-    extra: { sourceId: h.id, tag: `Homunculus · ${matiere?.nom ?? "?"}${anomalie ? ` · ${anomalie.nom}` : ""}`, title: "Capacités d'homunculus", features },
+    extra: {
+      sourceId: h.id,
+      tag: `Homunculus · ${matiere?.nom ?? "?"}${anomalie ? ` · ${anomalie.nom}` : ""}`,
+      title: "Capacités d'homunculus",
+      features,
+      note: "✨ Homunculus venu de l'Atelier : son niveau suit l'Écho. Chaque sauvegarde dans l'Atelier met cette fiche à jour (ton équipement, tes PV et tes notes sont gardés).",
+    },
   };
   const hpMax = deriveCharacter(s).hpMax;
   s.play = keep ? { ...s.play, hp: Math.min(s.play.hp, hpMax) } : { ...s.play, hp: hpMax };

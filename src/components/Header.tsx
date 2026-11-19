@@ -52,8 +52,8 @@ export default async function Header({ user }: { user: User }) {
     <>
       {/* Feuille servie seulement à ce joueur (route qui vérifie la session) ; ?e= la renouvelle quand l'Écho change. */}
       <link rel="stylesheet" href={`/s/perso.css?e=${entity.echo}`} precedence="high" />
-      {/* Active le thème : sans ce marqueur (autre compte, autre page), la feuille ci-dessus reste inerte. */}
-      <span id="astral-mark" hidden />
+      {/* Active le thème dès l'arrivée du HTML (pas de clignotement) ; SkyEntry le gère ensuite. */}
+      <script dangerouslySetInnerHTML={{ __html: 'document.documentElement.setAttribute("data-astral","")' }} />
       <SkyEntry level={entity.echo} />
       {nav}
     </>

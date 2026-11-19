@@ -113,6 +113,7 @@ export async function levelUpDraftAction(id: string, answers: Answers, hpMode: "
     await updateDb((db) => {
       const c = mine(db.vault, user, id);
       const state = c.state as CharacterState;
+      if (state.extra) throw new RuleError("Le niveau de cette fiche se règle ailleurs.");
       const hitDie = getClass(state.classId)?.hitDie ?? 8;
       const rolled = hpMode === "roll";
       const hpDie = rolled ? randomInt(1, hitDie + 1) : averageHp(hitDie);

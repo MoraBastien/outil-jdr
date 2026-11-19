@@ -1,8 +1,8 @@
-# homunculus-creator — « Atelier de Rigel » (BETA 0.1.0-beta)
+# homunculus-creator — « Atelier de Rigel » (BETA 0.2.0-beta)
 
 > **À l'attention de Claude Code.** Ce document décrit un outil autonome destiné à être branché dans un site plus grand, développé en Next.js. Lis-le en entier avant de toucher au code : il explique à quoi sert l'outil, comment il fonctionne, ce qu'il attend du site hôte et vers quoi il doit évoluer. Le propriétaire du projet (Tiank) parle français : l'interface, les données et les messages sont en français ; le code et les identifiants techniques sont en anglais/français mixte, comme dans les fichiers existants.
 
-**Statut : bêta.** Version `0.1.0-beta` (voir `meta.ts` et `CHANGELOG.md`). L'API publique, les types et certains ids de données peuvent encore changer. Un badge « Bêta » s'affiche dans l'en-tête de l'outil (désactivable avec `showBeta={false}`).
+**Statut : bêta.** Version `0.2.0-beta`, « la Forge stellaire » (voir `meta.ts` et `CHANGELOG.md`). L'API publique, les types et certains ids de données peuvent encore changer. Un badge « Bêta » s'affiche dans l'en-tête de l'outil (désactivable avec `showBeta={false}`).
 
 ---
 
@@ -145,7 +145,11 @@ Tout le CSS est dans `styles.css`, **préfixé `hc-` et limité à `.hc-root`** 
 
 Polices d'origine : Cormorant Garamond (titres), Inter (texte), IBM Plex Mono (étiquettes). Le module ne charge **aucune** police : c'est au site hôte de les fournir (`next/font`), sinon les replis (Georgia, système) s'appliquent.
 
-Le style est du « Liquid Glass » (verre dépoli, `backdrop-filter`), avec repli en fond opaque si `backdrop-filter` n'est pas supporté. Sur grand écran (≥ 961 px) la constellation et la fiche de cuve restent collées en haut pendant le défilement (`position: sticky` : aucun ancêtre ne doit avoir `overflow: hidden/auto`).
+Le style est celui de la **Forge stellaire** : panneaux de verre sombre, fil de lumière entre les étapes et, à droite,
+la cuve (`components/Forge.tsx`, canvas) où l'être se forme. L'accent de tout l'Atelier suit la matière choisie : le
+composant pose `--hc-accent-1`, `--hc-accent-2`, `--hc-forge-glow` et `--hc-veil` sur `.hc-root` depuis
+`data/forge.ts` (les surcharger côté site écrase donc ce comportement). Repli en fond opaque si `backdrop-filter`
+n'est pas supporté ; animations coupées si « moins d'animations ». Sur grand écran (≥ 961 px) la constellation et la fiche de cuve restent collées en haut pendant le défilement (`position: sticky` : aucun ancêtre ne doit avoir `overflow: hidden/auto`).
 
 ---
 
@@ -215,6 +219,7 @@ homunculus-creator/
 | `data/felures.ts` | 20 Fêlures | **Provisoires** : Tiank a ses propres idées |
 | `data/competences.ts`, `stats.ts` | 18 compétences, 6 caractéristiques, plafond 17 | — |
 | `data/constellations.ts` | 6 constellations de 6 étoiles | — |
+| `data/forge.ts` | Apparence de la cuve : couleurs et particules par matière, sceau par classe, effet par famille d'Anomalie | — |
 
 Un drapeau `provisoire: true` marque les entrées en attente de validation ; l'interface l'affiche sur les Anomalies. Ne le retirer que sur demande de Tiank.
 
