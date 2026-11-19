@@ -256,6 +256,25 @@ Le site peut être ajouté à l'écran d'accueil comme une application (`src/app
 - Un outil peut proposer plusieurs panneaux sur le tableau de bord grâce à `extraWidgets` dans le registre.
   Données : `chronicle` dans db.json.
 
+## Grimoire (`src/tools/grimoire/`) et Aide-mémoire (`src/tools/aide-memoire/`)
+
+Deux outils ouverts à tous (comme le coffre), pour que les règles restent accessibles quand Foundry est éteint.
+
+- **Grimoire** : les sorts de niveau 0 à 2 du SRD 5.2 (tout ce qu'un personnage de niveau 1 à 4 peut lancer), dans
+  `data/spells.ts` : une ligne `sp(...)` par sort, résumé en français écrit pour le site, distances en mètres. **À relire
+  et compléter par le MJ.** Grande barre de recherche (nom, école, classe, effet, sans tenir compte des accents),
+  filtres (niveau, concentration, rituel, classe). Par défaut, « Pour <personnage> » : la liste de sa classe (magicien
+  pour Chevalier occulte et Escroc arcanique) jusqu'au niveau de sort qu'il peut lancer.
+- **Choisir ses sorts** : « Apprendre ce sort mineur » / « Préparer ce sort » range l'id du sort dans la fiche du
+  personnage (`state.grimoire`). `toggleGrimoireSpellAction` vérifie le propriétaire, la classe, le niveau et les
+  limites de sorts mineurs et préparés du moteur de règles (`derive().spell`). La fiche les affiche dans l'onglet Sorts
+  (« Mes sorts du Grimoire ») ; chaque nom ouvre son détail : `/outils/grimoire?perso=<id>&sort=<id du sort>`. Les champs
+  texte libres de la fiche restent pour le reste.
+- **Aide-mémoire** : une page statique (composant serveur) : ton tour, les 12 actions, jets et DD, couverture,
+  concentration, 0 PV et mort, repos, attaque d'opportunité, et les 15 états en une ligne chacun. Chaque section est
+  un `<details>` ouvert (repliable sur téléphone) ; les états ont une ancre `#etat-<nom>` pour y renvoyer.
+- Mention de licence obligatoire (CC-BY-4.0) en bas des deux pages.
+
 ## Cimetière (`src/tools/cemetery/`)
 
 - Un cimetière par groupe, visible de ses membres (outil de groupe, comme le planning).

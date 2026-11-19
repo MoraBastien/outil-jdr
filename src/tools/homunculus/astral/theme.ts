@@ -101,6 +101,8 @@ export const NAV_GLYPHS: Record<string, string> = {
   "homunculus-creator": "✶︎",
   des: "☿︎",
   groupe: "♅︎",
+  grimoire: "♆︎",
+  "aide-memoire": "☊︎",
 };
 
 /** Libellés propres à ce thème. */

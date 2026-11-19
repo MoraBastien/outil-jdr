@@ -121,6 +121,12 @@ export type CharacterState = {
   history: LevelUpEntry[];
 
   /**
+   * Sorts choisis dans le Grimoire (ids de src/tools/grimoire/data/spells.ts) : sorts mineurs et sorts préparés.
+   * Modifiés seulement par l'action du Grimoire, qui vérifie la classe, le niveau et les limites.
+   */
+  grimoire?: string[];
+
+  /**
    * Fiche venue d'un autre outil (l'homunculus actif d'un joueur de l'Atelier, voir tools/homunculus/transfer.ts).
    * Pas d'espèce ni d'historique ; ses passifs s'ajoutent à l'onglet Capacités. Le niveau suit l'Écho :
    * pas de montée de niveau ici. Les textes sont écrits par le serveur (le code client reste neutre).

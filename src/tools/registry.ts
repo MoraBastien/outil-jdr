@@ -26,6 +26,9 @@ import { CHRONICLE_TOOL_ID } from "./chronicle/meta";
 import PlanningWidget from "./planning/PlanningWidget";
 import { PLANNING_TOOL_ID } from "./planning/types";
 import { TOOL_META as HOMUNCULUS_META } from "./homunculus-creator/meta";
+import Grimoire from "./grimoire/Grimoire";
+import { GRIMOIRE_TOOL_ID } from "./grimoire/meta";
+import AideMemoire, { AIDE_MEMOIRE_TOOL_ID } from "./aide-memoire/AideMemoire";
 
 /** Infos du joueur transmises à chaque outil (jamais son code). */
 export type ToolPlayer = {
@@ -173,6 +176,26 @@ export const TOOLS: ToolDefinition[] = [
     section: "campagne",
     short: "Cimetière",
     widget: { component: CemeteryWidget, title: "Cimetière", order: 40 },
+  },
+  {
+    id: GRIMOIRE_TOOL_ID, // "grimoire"
+    name: "Grimoire",
+    description: "Les sorts de niveau 0 à 2 : recherche, détail, et le choix des sorts de ton personnage.",
+    icon: "📕",
+    component: Grimoire,
+    section: "outils",
+    short: "Grimoire",
+    wide: true,
+  },
+  {
+    id: AIDE_MEMOIRE_TOOL_ID, // "aide-memoire"
+    name: "Aide-mémoire",
+    description: "Les règles essentielles sur une page : ton tour, les actions, les jets, la mort et les états.",
+    icon: "🧭",
+    component: AideMemoire,
+    section: "outils",
+    short: "Règles",
+    wide: true,
   },
   // { id: "mon-outil", name: "Mon outil", description: "…", icon: "🗺️", component: MonOutil, widget: { component: MonWidget } },
 ];

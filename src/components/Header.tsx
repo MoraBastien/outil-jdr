@@ -9,7 +9,7 @@ import { ASTRAL_LABELS, NAV_GLYPHS } from "@/tools/homunculus/astral/theme";
 import SkyEntry from "@/tools/homunculus/astral/SkyEntry";
 
 /** Ordre d'affichage des outils (les plus utilisés d'abord, c'est aussi l'ordre de la barre mobile). */
-const PRIORITY = ["personnage", "planning", "chronique", "quetes", "cimetiere", "coffre", "homunculus-creator", "des"];
+const PRIORITY = ["personnage", "planning", "chronique", "quetes", "cimetiere", "coffre", "homunculus-creator", "grimoire", "aide-memoire", "des"];
 const rank = (id: string) => (PRIORITY.includes(id) ? PRIORITY.indexOf(id) : PRIORITY.length);
 
 export default async function Header({ user }: { user: User }) {

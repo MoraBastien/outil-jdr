@@ -10,6 +10,8 @@ import { getBackground, getSpecies } from "../data/origins";
 import { armorTraining, derive, fmtMod, weaponFromCatalog } from "../rules";
 import type { CharacterRecord, CharacterState, Weapon } from "../types";
 import Hint from "./Hint";
+import Link from "next/link";
+import { getSpell } from "@/tools/grimoire/data/spells";
 
 type Patch = Partial<CharacterState>;
 type TabId = "stats" | "combat" | "features" | "spells" | "gear" | "story" | "history";
@@ -526,6 +528,7 @@ export default function Sheet({
                 )}
               </div>
             </Section>
+            <GrimoireSpells record={record} state={s} cantripsMax={d.spell.cantrips} preparedMax={d.spell.prepared} editable={editable} />
             <div className="grid-2">
               <Section title={`Sorts mineurs (${d.spell.cantrips})`}>
                 <TextField multiline rows={6} value={s.cantrips} onCommit={(v) => patch({ cantrips: v })} disabled={!editable} label="Sorts mineurs" placeholder="Un sort par ligne" />
@@ -783,5 +786,52 @@ function WeaponTable({
         </div>
       )}
     </div>
+  );
+}
+
+/** Sorts choisis dans le Grimoire : chaque nom ouvre son détail ; le choix se fait dans le Grimoire. */
+function GrimoireSpells({ record, state, cantripsMax, preparedMax, editable }: { record: CharacterRecord; state: CharacterState; cantripsMax: number; preparedMax: number; editable: boolean }) {
+  const spells = (state.grimoire ?? []).map(getSpell).filter((x): x is NonNullable<typeof x> => Boolean(x));
+  const cantrips = spells.filter((x) => x.level === 0);
+  const prepared = spells.filter((x) => x.level > 0).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name, "fr"));
+  const href = (id?: string) => `/outils/grimoire?perso=${encodeURIComponent(record.id)}${id ? `&sort=${encodeURIComponent(id)}` : ""}`;
+  const chips = (list: typeof spells) =>
+    list.map((x) => (
+      <Link key={x.id} href={href(x.id)} className="cs-grimoire-chip" title={`${x.level === 0 ? "Sort mineur" : `Niveau ${x.level}`} · ${x.school}`}>
+        {x.level > 0 && <span className="cs-grimoire-lvl">{x.level}</span>}
+        {x.name}
+        {x.concentration && <span className="muted"> · C</span>}
+        {x.ritual && <span className="muted"> · R</span>}
+      </Link>
+    ));
+  return (
+    <Section title="Mes sorts du Grimoire" hint="Les sorts choisis dans le Grimoire. Clique sur un sort pour relire ce qu'il fait.">
+      {spells.length === 0 ? (
+        <p className="muted small">
+          Aucun sort choisi pour l&apos;instant.{" "}
+          {editable && (
+            <Link href={href()} className="text-link">
+              Choisir mes sorts dans le Grimoire →
+            </Link>
+          )}
+        </p>
+      ) : (
+        <div className="stack">
+          <div className="stack-xs">
+            <span className="label">Sorts mineurs · {cantrips.length}/{cantripsMax}</span>
+            <div className="cs-grimoire">{cantrips.length ? chips(cantrips) : <span className="muted small">Aucun</span>}</div>
+          </div>
+          <div className="stack-xs">
+            <span className="label">Sorts préparés · {prepared.length}/{preparedMax}</span>
+            <div className="cs-grimoire">{prepared.length ? chips(prepared) : <span className="muted small">Aucun</span>}</div>
+          </div>
+          {editable && (
+            <Link href={href()} className="text-link small">
+              Modifier dans le Grimoire →
+            </Link>
+          )}
+        </div>
+      )}
+    </Section>
   );
 }

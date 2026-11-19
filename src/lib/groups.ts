@@ -6,8 +6,8 @@ import type { Db, Group, User } from "./db";
 export const GROUP_TOOL_IDS = ["planning", "personnage", "chronique", "quetes", "cimetiere"];
 export const isGroupTool = (toolId: string) => GROUP_TOOL_IDS.includes(toolId);
 
-/** Outils ouverts à tous les joueurs, sans case à cocher (le coffre à personnages). */
-export const ALWAYS_TOOL_IDS = ["coffre"];
+/** Outils ouverts à tous les joueurs, sans case à cocher (le coffre, le grimoire, l'aide-mémoire). */
+export const ALWAYS_TOOL_IDS = ["coffre", "grimoire", "aide-memoire"];
 export const isAlwaysTool = (toolId: string) => ALWAYS_TOOL_IDS.includes(toolId);
 /** Outils liés au type de joueur « Entité » (l'Atelier de Rigel), sans case à cocher. */
 export const ENTITY_TOOL_IDS = ["homunculus-creator"];
