@@ -9,6 +9,7 @@ import HomunculusEntry from "./homunculus/HomunculusEntry";
 import HomunculusWidget from "./homunculus/HomunculusWidget";
 import CharacterHost from "./character/CharacterHost";
 import CharacterWidget from "./character/CharacterWidget";
+import GroupWidget from "./character/GroupWidget";
 import { CHARACTER_TOOL_ID } from "./character/types";
 import Planning from "./planning/Planning";
 import VaultTool from "./vault/VaultTool";
@@ -56,6 +57,10 @@ export type ToolWidget = {
   order?: number;
   /** Icône du panneau (par défaut : celle de l'outil). */
   icon?: string;
+  /** Identifiant du panneau, s'il n'est pas le principal de l'outil (glyphe du thème « Astre déchu »). */
+  id?: string;
+  /** Réservé aux joueurs (masqué pour le MJ). */
+  playersOnly?: boolean;
 };
 
 export type ToolDefinition = {
@@ -126,6 +131,8 @@ export const TOOLS: ToolDefinition[] = [
     short: "Fiche",
     wide: true,
     widget: { component: CharacterWidget, title: "Mes personnages", adminTitle: "Personnages de la table", wide: true, order: 5 },
+    // Juste sous « Mes personnages » : les personnages en jeu de tout le groupe (le MJ a déjà la table complète).
+    extraWidgets: [{ id: "groupe", component: GroupWidget, title: "Mon groupe", icon: "👥", wide: true, order: 6, playersOnly: true }],
   },
   {
     id: VAULT_TOOL_ID, // "coffre"

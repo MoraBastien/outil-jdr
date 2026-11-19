@@ -145,8 +145,9 @@ Tout le CSS est dans `styles.css`, **préfixé `hc-` et limité à `.hc-root`** 
 
 Polices d'origine : Cormorant Garamond (titres), Inter (texte), IBM Plex Mono (étiquettes). Le module ne charge **aucune** police : c'est au site hôte de les fournir (`next/font`), sinon les replis (Georgia, système) s'appliquent.
 
-Le style est celui de la **Forge stellaire** : panneaux de verre sombre, fil de lumière entre les étapes et, à droite,
-la cuve (`components/Forge.tsx`, canvas) où l'être se forme. L'accent de tout l'Atelier suit la matière choisie : le
+Le style est celui de la **Forge stellaire** : panneaux sombres, fil de lumière entre les étapes et, à droite,
+la cuve (`components/Forge.tsx`, canvas) où l'être prend **forme humaine, en constellation** : chaque choix
+(matière, classe, caractéristiques, Écho, Anomalie, Fêlure, nom) change son aspect, jusqu'à l'éveil. L'accent de tout l'Atelier suit la matière choisie : le
 composant pose `--hc-accent-1`, `--hc-accent-2`, `--hc-forge-glow` et `--hc-veil` sur `.hc-root` depuis
 `data/forge.ts` (les surcharger côté site écrase donc ce comportement). Repli en fond opaque si `backdrop-filter`
 n'est pas supporté ; animations coupées si « moins d'animations ». Sur grand écran (≥ 961 px) la constellation et la fiche de cuve restent collées en haut pendant le défilement (`position: sticky` : aucun ancêtre ne doit avoir `overflow: hidden/auto`).

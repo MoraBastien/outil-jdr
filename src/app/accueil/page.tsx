@@ -18,7 +18,8 @@ export default async function HomePage() {
   const tools = TOOLS.filter((t) => canUseTool(user, t.id));
   // Tableau de bord : un panneau par outil qui en propose un, dans l'ordre demandé.
   const widgets = tools
-    .flatMap((t) => [...(t.widget ? [t.widget] : []), ...(t.extraWidgets ?? [])].map((w, i) => ({ t, w, key: i === 0 ? t.id : `${t.id}-${i}` })))
+    .flatMap((t) => [...(t.widget ? [t.widget] : []), ...(t.extraWidgets ?? [])].map((w, i) => ({ t, w, main: i === 0 && Boolean(t.widget), key: i === 0 ? t.id : `${t.id}-${i}` })))
+    .filter(({ w }) => !(isAdmin && w.playersOnly))
     .sort((a, b) => (a.w.order ?? 100) - (b.w.order ?? 100));
 
   const { notes } = user.profile;
@@ -30,7 +31,9 @@ export default async function HomePage() {
   const hasProfile = fields.length > 0 || notes.trim() !== "";
   // Joueur de l'Atelier : thème « Astre déchu » (salut céleste, nom de l'entité, glyphes, « Mon entité »).
   const entity = entitySheetOf(user);
-  const titleOf = (id: string, title: string) => (entity && id === "personnage" ? ASTRAL_LABELS.personnage : title);
+  // Seul le panneau principal de la fiche devient « Mon entité » ; les glyphes suivent l'outil ou l'id du panneau.
+  const titleOf = (id: string, main: boolean, title: string) => (entity && main && id === "personnage" ? ASTRAL_LABELS.personnage : title);
+  const glyphOf = (id: string, main: boolean, widgetId?: string) => (entity ? (widgetId ? NAV_GLYPHS[widgetId] : main ? NAV_GLYPHS[id] : undefined) : undefined);
 
   return (
     <>
@@ -50,10 +53,10 @@ export default async function HomePage() {
           </div>
         ) : (
           <div className="dashboard">
-            {widgets.map(({ t, w, key }) => {
+            {widgets.map(({ t, w, key, main }) => {
               const W = w.component;
               return (
-                <Widget key={key} title={titleOf(t.id, (isAdmin && w.adminTitle) || w.title || t.name)} icon={(entity && NAV_GLYPHS[t.id]) || w.icon || t.icon} href={`/outils/${t.id}`} wide={w.wide} transitionName={`tool-${key}`}>
+                <Widget key={key} title={titleOf(t.id, main, (isAdmin && w.adminTitle) || w.title || t.name)} icon={glyphOf(t.id, main, w.id) || w.icon || t.icon} href={`/outils/${t.id}`} wide={w.wide} transitionName={`tool-${key}`}>
                   <W user={user} />
                 </Widget>
               );

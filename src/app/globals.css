@@ -1710,3 +1710,21 @@ button.qw-quest { width: 100%; font: inherit; text-align: left; cursor: pointer;
 .cs-save-state.error { color: var(--danger); }
 .card-dashed { border-style: dashed; }
 .chip-violet { color: #c9b6ff; border-color: rgba(170, 140, 240, 0.45); }
+
+/* ---------- Widget « Mon groupe » (src/tools/character/GroupWidget.tsx) ---------- */
+.grp-groups { display: flex; flex-direction: column; gap: 16px; }
+.grp-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.grp-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); min-width: 0; }
+.grp-card.me { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.grp-card.grp-none { border-style: dashed; background: transparent; }
+.grp-card.grp-none .grp-portrait { opacity: 0.45; box-shadow: none; }
+.grp-portrait { width: 44px; height: 44px; border-radius: 12px; font-size: 1.35rem; }
+.grp-portrait .cs-level { min-width: 20px; height: 20px; font-size: 0.7rem; right: -6px; bottom: -6px; }
+.grp-text { min-width: 0; }
+.grp-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; overflow-wrap: anywhere; }
+.grp-name .chip { font-size: 0.68rem; padding: 1px 7px; }
+.grp-grid > li { animation: rise 0.45s var(--ease) both; }
+.grp-grid > li:nth-child(2) { animation-delay: 0.05s; }
+.grp-grid > li:nth-child(3) { animation-delay: 0.1s; }
+.grp-grid > li:nth-child(n + 4) { animation-delay: 0.15s; }
+@media (prefers-reduced-motion: reduce) { .grp-grid > li { animation: none; } }

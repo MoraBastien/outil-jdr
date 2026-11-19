@@ -5,7 +5,7 @@
 // les autres joueurs ne la téléchargent jamais et rien de ce thème n'est dans le CSS commun.
 //
 // Toutes les règles sont conditionnées par l'attribut html[data-astral], posé seulement pour une Entité
-// (script en ligne de Header au premier chargement, puis SkyEntry à l'affichage, retiré quand il disparaît).
+// (par le layout racine, côté serveur, au premier chargement ; puis par SkyEntry à l'affichage, retiré quand il disparaît).
 // React garde une feuille <link precedence> chargée d'une page à l'autre (changement de compte sans rechargement
 // compris) : sans l'attribut, elle reste inerte. Un attribut plutôt que :has() : html:has(…) obligeait le
 // navigateur à recalculer les styles de toute la page à chaque changement du DOM.
@@ -100,6 +100,7 @@ export const NAV_GLYPHS: Record<string, string> = {
   coffre: "♁︎",
   "homunculus-creator": "✶︎",
   des: "☿︎",
+  groupe: "♅︎",
 };
 
 /** Libellés propres à ce thème. */

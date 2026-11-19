@@ -222,8 +222,9 @@
 .hc-root .hc-forge{position:relative;border-radius:var(--hc-radius);overflow:hidden;border:1px solid var(--hc-line);
   background:radial-gradient(120% 90% at 50% 45%,color-mix(in srgb,var(--hc-veil) 100%,transparent),transparent 70%),#050817;
   box-shadow:0 24px 60px -24px var(--hc-forge-glow),inset 0 0 60px rgba(0,0,10,.6);transition:box-shadow .8s}
-.hc-root .hc-forge-canvas{display:block;width:100%;aspect-ratio:1/1;max-height:min(42vh,400px)}
-@media (max-width:1020px){.hc-root .hc-forge-canvas{max-height:340px}}
+/* Format portrait : l'être est debout. */
+.hc-root .hc-forge-canvas{display:block;width:100%;aspect-ratio:4/5;max-height:min(58vh,500px)}
+@media (max-width:1020px){.hc-root .hc-forge-canvas{max-height:440px}}
 .hc-root .hc-forge-caption{position:relative;display:grid;gap:2px;justify-items:center;text-align:center;padding:4px 16px 16px;color:#eef1ff}
 .hc-root .hc-forge-coord{font:500 .66rem var(--hc-font-mono);letter-spacing:.18em;text-transform:uppercase;color:var(--hc-accent-1);opacity:.85}
 .hc-root .hc-forge-name{font:600 1.7rem/1.1 var(--hc-font-display);overflow-wrap:anywhere}

@@ -1,5 +1,5 @@
 // Fichier de données : apparence de la Forge stellaire (couleurs, particules, sceaux). Modifiable sans toucher au code.
-// Chaque choix de création change l'aspect de l'être qui se forme dans la cuve et la couleur de l'Atelier.
+// Chaque choix de création change l'aspect de l'être (forme humaine en constellation) et la couleur de l'Atelier.
 
 /** Comportement des particules autour du cœur. */
 export type ParticleKind = "sparks" | "embers" | "corona" | "shards" | "rays" | "plumes" | "void" | "dust";
@@ -27,7 +27,7 @@ export const FORGE_DEFAULT: MatiereVisual = {
   accent2: "#e9ab45",
   veil: "rgba(120,110,220,.18)",
   particles: "sparks",
-  murmure: "La cuve attend sa matière.",
+  murmure: "Le moule attend sa matière.",
 };
 
 export const MATIERE_VISUALS: Record<string, MatiereVisual> = {
@@ -39,7 +39,7 @@ export const MATIERE_VISUALS: Record<string, MatiereVisual> = {
     accent2: "#f0b545",
     veil: "rgba(255,200,110,.16)",
     particles: "sparks",
-    murmure: "Des traînées d'or filent autour du cœur.",
+    murmure: "Des traînées d'or filent autour de son corps.",
   },
   "roche-de-meteorite": {
     core: "#ffd2a8",
@@ -49,7 +49,7 @@ export const MATIERE_VISUALS: Record<string, MatiereVisual> = {
     accent2: "#d9723c",
     veil: "rgba(200,90,40,.16)",
     particles: "embers",
-    murmure: "La roche brûle encore de sa chute.",
+    murmure: "Sa peau de roche brûle encore de sa chute.",
   },
   eclipse: {
     core: "#05060f",
@@ -59,7 +59,7 @@ export const MATIERE_VISUALS: Record<string, MatiereVisual> = {
     accent2: "#c9b67a",
     veil: "rgba(60,50,90,.25)",
     particles: "corona",
-    murmure: "Un cœur d'ombre, cerclé de lumière.",
+    murmure: "Un corps d'ombre, cerclé de lumière.",
   },
   "metal-asteroide": {
     core: "#f2f6ff",
@@ -69,7 +69,7 @@ export const MATIERE_VISUALS: Record<string, MatiereVisual> = {
     accent2: "#9cb0d3",
     veil: "rgba(140,160,210,.16)",
     particles: "shards",
-    murmure: "Des éclats de métal tournent comme des lames.",
+    murmure: "Des éclats de métal tournent autour de lui.",
   },
   "rayonnement-solaire": {
     core: "#ffffff",
@@ -79,7 +79,7 @@ export const MATIERE_VISUALS: Record<string, MatiereVisual> = {
     accent2: "#ff9f1c",
     veil: "rgba(255,160,40,.18)",
     particles: "rays",
-    murmure: "Le cœur rayonne comme un petit soleil.",
+    murmure: "Il rayonne comme un petit soleil.",
   },
   "geysers-d-encelade": {
     core: "#f2fdff",
@@ -89,7 +89,7 @@ export const MATIERE_VISUALS: Record<string, MatiereVisual> = {
     accent2: "#4fb6dc",
     veil: "rgba(80,190,235,.16)",
     particles: "plumes",
-    murmure: "Des geysers de givre jaillissent de la cuve.",
+    murmure: "Du givre jaillit de ses épaules.",
   },
   "matiere-noire": {
     core: "#1a0d33",
@@ -99,7 +99,7 @@ export const MATIERE_VISUALS: Record<string, MatiereVisual> = {
     accent2: "#8e5cf5",
     veil: "rgba(110,60,220,.22)",
     particles: "void",
-    murmure: "La lumière tombe dans le cœur et n'en ressort pas.",
+    murmure: "La lumière tombe en lui et n'en ressort pas.",
   },
   "poussiere-cosmique": {
     core: "#fff0f6",
@@ -109,7 +109,7 @@ export const MATIERE_VISUALS: Record<string, MatiereVisual> = {
     accent2: "#d873ad",
     veil: "rgba(230,120,190,.16)",
     particles: "dust",
-    murmure: "Une nébuleuse de poussière tourne lentement.",
+    murmure: "Une nébuleuse tourne autour de ses hanches.",
   },
 };
 

@@ -21,6 +21,11 @@ Refonte graphique : l'Atelier raconte la création d'un être venu des étoiles.
 - CSS réécrit et aligné sur les classes réellement utilisées (`hc-on`, `hc-ghost`… n'étaient plus stylées).
 - Téléphone : la cuve d'abord, puis les étapes, puis la fiche. Tout est figé si « moins d'animations ».
 - `components/Constellation.tsx` n'est plus utilisé (gardé pour compatibilité).
+- **L'être prend forme humaine, en constellation** (remplace la planète) : articulations en étoiles reliées par des
+  traits, voile ténu pour le volume, cuve en format portrait. La matière allume les étoiles des pieds à la tête ;
+  sceau de classe sur la poitrine autour d'un cœur-étoile ; caractéristiques par partie du corps (FOR bras, DEX jambes,
+  CON torse, INT tête, SAG cœur, CHA aura) ; anneaux de l'Écho autour du corps ; battement (Combat), dérive
+  (Exploration) ou ondes depuis la tête (Social) ; Fêlure de l'épaule à la hanche ; l'être ouvre les yeux à l'éveil.
 - **La fiche de cuve est retirée** : la cuve montre l'être. Ses actions passent sous la cuve (« Nouveau », « Copier la
   fiche », bouton d'envoi si `onSubmit`) ; le bouton de sauvegarde y est aussi, collé en bas de l'écran sur téléphone
   (prop `saveLabel`). `components/Sheet.tsx` n'est plus affiché (gardé pour compatibilité).

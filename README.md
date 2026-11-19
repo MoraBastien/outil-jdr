@@ -58,6 +58,10 @@ widget: { component: MonWidget, title: "Titre du panneau", wide: false, order: 5
 
 Widgets existants : Planning (`order` 10, prochaine session + sondages), Atelier de Rigel (20, fiches),
 Lanceur de dés (30, jet rapide).
+« Mon groupe » (`order` 6, juste sous « Mes personnages », joueurs seulement : `playersOnly`) montre le personnage en
+jeu de chaque membre des groupes du joueur (`src/tools/character/GroupWidget.tsx`). Il reste neutre : un homunculus y
+apparaît comme un personnage ordinaire, et une Entité sans homunculus actif « n'a pas encore de personnage » pour les
+autres.
 
 Pour un outil existant en HTML/JS autonome : le mettre dans `public/outils-statiques/<id>/` et créer un composant
 qui l'affiche dans une `<iframe src="/outils-statiques/<id>/index.html">`. Attention : les fichiers de `public/` sont accessibles sans
@@ -143,9 +147,9 @@ pouvoirs, et le site devient sa carte du ciel. **Chaque niveau d'Écho rallume u
   (« Observatoire », « Mon entité ») et le salut de l'accueil (« Ciel du 19 novembre · lune croissante »).
 - `src/app/s/perso.css/route.ts` : sert cette feuille **seulement** aux joueurs de l'Atelier (session vérifiée ; les
   autres reçoivent une feuille vide). `Header.tsx` l'ajoute avec `<link precedence>` et `?e=<Écho>`.
-- **Toutes ses règles dépendent de l'attribut `html[data-astral]`**, posé pour une Entité seulement : par un petit
-  script en ligne de `Header.tsx` au premier chargement (pas de clignotement), puis par `SkyEntry.tsx`, qui le retire
-  quand il disparaît. React garde une feuille `<link precedence>` chargée d'une page à l'autre, même après un
+- **Toutes ses règles dépendent de l'attribut `html[data-astral]`**, posé pour une Entité seulement : côté serveur
+  par le layout racine (`src/app/layout.tsx`, pas de clignotement et même HTML que le client), puis par
+  `SkyEntry.tsx` lors des navigations, qui le retire quand il disparaît. React garde une feuille `<link precedence>` chargée d'une page à l'autre, même après un
   changement de compte sans rechargement : sans l'attribut, elle reste inerte. (Un `html:has(#marqueur)` faisait
   recalculer les styles de toute la page à chaque changement du DOM.)
 - **Pas de flou d'arrière-plan** (`backdrop-filter`) sur ce qui passe au-dessus du ciel ou de la cuve : ils sont animés,

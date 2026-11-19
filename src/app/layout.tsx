@@ -3,6 +3,9 @@ import { Fraunces, Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import Spotlight from "@/components/Spotlight";
 import "./globals.css";
+import { getSessionUserId } from "@/lib/session";
+import { getUserById } from "@/lib/db";
+import { isEntityPlayer } from "@/tools/homunculus/entity";
 
 const display = Fraunces({ subsets: ["latin"], variable: "--font-display", display: "swap" });
 const sans = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
@@ -20,9 +23,25 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/**
+ * Thème « Astre déchu » : l'attribut html[data-astral] est posé ici, côté serveur, pour une Entité (pas de
+ * clignotement au premier affichage, et le même HTML côté serveur et côté client). SkyEntry le pose et le retire
+ * ensuite lors des navigations (changement de compte sans rechargement compris).
+ */
+async function isAstral(): Promise<boolean> {
+  try {
+    const id = await getSessionUserId();
+    const user = id ? await getUserById(id) : undefined;
+    return Boolean(user && isEntityPlayer(user));
+  } catch {
+    return false;
+  }
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const astral = await isAstral();
   return (
-    <html lang="fr" className={`${display.variable} ${sans.variable}`}>
+    <html lang="fr" className={`${display.variable} ${sans.variable}`} data-astral={astral ? "" : undefined}>
       <body>
         {/* Fond animé : aurore + étoiles (purement décoratif). */}
         <div className="sky" aria-hidden="true">
