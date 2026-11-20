@@ -6,6 +6,7 @@ import type { ToolPlayer } from "../registry";
 import CreationWizard from "../character/components/CreationWizard";
 import LevelUpWizard from "../character/components/LevelUpWizard";
 import Sheet from "../character/components/Sheet";
+import { ExportButtons, ImportCard, ImportNotes } from "../character/components/TransferButtons";
 import { proposalBlocker } from "../character/proposal";
 import { shortLabel } from "../character/rules";
 import { MAX_LEVEL } from "../character/types";
@@ -14,6 +15,7 @@ import {
   deleteDraftAction,
   duplicateDraftAction,
   getVaultAction,
+  importDraftAction,
   levelUpDraftAction,
   proposeDraftAction,
   revertDraftAction,
@@ -34,6 +36,8 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
   const [screen, setScreen] = useState<Screen>({ kind: "list" });
   const [levelUpOpen, setLevelUpOpen] = useState(false);
   const [proposeOpen, setProposeOpen] = useState(false);
+  /** Remarques sur la dernière fiche importée (ce qui n'a pas pu être repris tel quel). */
+  const [importNotes, setImportNotes] = useState<{ id: string; source: "outil" | "foundry"; warnings: string[] } | null>(null);
 
   useEffect(() => {
     getVaultAction()
@@ -150,6 +154,7 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
                 🗝️ Proposer au MJ
               </button>
             )}
+            <ExportButtons state={record.state} />
             <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => run(duplicateDraftAction(record.id))}>
               Dupliquer
             </button>
@@ -172,6 +177,7 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
           {extra?.note ?? "🗝️ Essai du coffre : tu choisis toi-même ton niveau, et tu peux revenir en arrière à tout moment. Rien ici n'affecte tes fiches de campagne."}
         </p>
         {errorBox}
+        {importNotes?.id === record.id && <ImportNotes source={importNotes.source} warnings={importNotes.warnings} onClose={() => setImportNotes(null)} />}
         <ProposalStatus draftId={record.id} groups={groups} busy={busy} onWithdraw={(g) => run(withdrawProposalAction(g))} />
         {proposeOpen && (
           <ProposeForm
@@ -234,6 +240,18 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
           <strong>Nouvel essai</strong>
           <span className="muted small">Même assistant, en plus libre</span>
         </button>
+        <ImportCard
+          busy={busy}
+          allowFoundry={player.isAdmin}
+          onError={setError}
+          onImport={async ({ state, warnings, source }) => {
+            const r = (await run(importDraftAction(state, source))) as Awaited<ReturnType<typeof importDraftAction>> | null;
+            if (r?.ok && r.importedId) {
+              setImportNotes({ id: r.importedId, source, warnings: Array.from(new Set([...warnings, ...(r.warnings ?? [])])) });
+              setScreen({ kind: "open", id: r.importedId });
+            }
+          }}
+        />
         {entries.map(({ record }) => (
           <button key={record.id} type="button" className="vault-card" onClick={() => setScreen({ kind: "open", id: record.id })}>
             <span className="cs-portrait" aria-hidden="true">

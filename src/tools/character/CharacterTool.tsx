@@ -18,6 +18,7 @@ import {
   deleteCharacterAction,
   getCharacterViewAction,
   grantLevelAction,
+  importCharacterAction,
   levelUpAction,
   saveCharacterAction,
   type ActionResult,
@@ -29,6 +30,7 @@ import {
 import CreationWizard from "./components/CreationWizard";
 import LevelUpWizard from "./components/LevelUpWizard";
 import Sheet from "./components/Sheet";
+import { ExportButtons, ImportNotes, MjImportButton } from "./components/TransferButtons";
 import { shortLabel, type CreationInput } from "./rules";
 import { MAX_LEVEL, type Answers, type CharacterRecord } from "./types";
 
@@ -122,6 +124,9 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
         {!view.isAdmin && !canLevelUp && record.state.level < MAX_LEVEL && (
           <PrepareCard record={record} busy={busy} onOpen={() => setPrepareFor(record.id)} onClear={() => run(clearPreparedAction(record.id))} />
         )}
+        <div className="cs-export-bar">
+          <ExportButtons state={record.state} />
+        </div>
         <Sheet
           key={record.id}
           record={record}
@@ -274,6 +279,9 @@ function AdminPanel({
   const [snapshotLevel, setSnapshotLevel] = useState<number | null>(null);
   const [deathOpen, setDeathOpen] = useState(false);
   const [epitaph, setEpitaph] = useState("");
+  /** Dernier import Foundry : ce qu'il faut vérifier sur la fiche créée. */
+  const [importNotes, setImportNotes] = useState<{ id: string; source: "outil" | "foundry"; warnings: string[] } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const allEntries: AdminEntry[] = [...view.groups.flatMap((g) => g.members.flatMap((m) => (m.entry ? [m.entry] : []))), ...view.archived];
   const selected = sel?.kind === "sheet" ? allEntries.find((e) => e.record.id === sel.characterId) : undefined;
@@ -329,7 +337,17 @@ function AdminPanel({
 
   /** `archivedLabel` : fiche hors groupe (lecture seule, pas de montée de niveau). */
   /** `chip` : pastille fournie par le serveur (fiche d'un autre type). */
-  const rosterItem = (key: string, name: string, entry: AdminEntry | null, onCreate?: () => void, archivedLabel?: string, proposal?: PendingProposal | null, chip?: string) => {
+  /** `importFor` : membre sans fiche, à qui le MJ peut importer un personnage Foundry. */
+  const rosterItem = (
+    key: string,
+    name: string,
+    entry: AdminEntry | null,
+    onCreate?: () => void,
+    archivedLabel?: string,
+    proposal?: PendingProposal | null,
+    chip?: string,
+    importFor?: { groupId: string; ownerId: string },
+  ) => {
     const r = entry?.record;
     const pending = r && r.grantedLevel > r.state.level;
     // Fiche venue d'un autre outil : son niveau ne s'accorde pas ici.
@@ -357,6 +375,22 @@ function AdminPanel({
             <button type="button" className="btn btn-ghost btn-small" onClick={onCreate}>
               Créer pour {name}
             </button>
+          )}
+          {!r && importFor && (
+            <MjImportButton
+              busy={busy}
+              name={name}
+              onError={setImportError}
+              onImport={async ({ state, warnings, source }) => {
+                const res = (await run(importCharacterAction(state, importFor.groupId, importFor.ownerId))) as Awaited<ReturnType<typeof importCharacterAction>> | null;
+                if (!res?.ok) return;
+                const created = res.view.groups.find((g) => g.id === importFor.groupId)?.members.find((m) => m.id === importFor.ownerId)?.entry;
+                if (created) {
+                  pick(created.record.id);
+                  setImportNotes({ id: created.record.id, source, warnings: Array.from(new Set([...warnings, ...(res.warnings ?? [])])) });
+                }
+              }}
+            />
           )}
           {live && r.prepared && <span className="chip chip-ok">Choix du niv. {r.prepared.level} prêts</span>}
           {live && pending && (
@@ -391,6 +425,14 @@ function AdminPanel({
         </p>
       </header>
       {errorBox}
+      {importError && (
+        <p className="flash flash-error" role="alert">
+          {importError}
+          <button type="button" className="toast-close" onClick={() => setImportError(null)} aria-label="Fermer">
+            ×
+          </button>
+        </p>
+      )}
 
       {view.groups.length === 0 && <p className="flash flash-error">Aucun groupe de jeu : crée un groupe et ajoutes-y des joueurs dans l&apos;administration.</p>}
 
@@ -447,6 +489,7 @@ function AdminPanel({
                   undefined,
                   m.proposal,
                   m.other?.chip,
+                  m.other ? undefined : { groupId: g.id, ownerId: m.id },
                 ),
               )}
             </ul>
@@ -477,6 +520,7 @@ function AdminPanel({
 
       {selected && (
         <section className="stack">
+          {importNotes?.id === selected.record.id && <ImportNotes source={importNotes.source} warnings={importNotes.warnings} onClose={() => setImportNotes(null)} />}
           <div className="cs-row-between">
             <div className="segmented-tabs" role="tablist" aria-label="Version de la fiche">
               <button type="button" role="tab" aria-selected={snapshotLevel === null} className={snapshotLevel === null ? "on" : ""} onClick={() => setSnapshotLevel(null)}>

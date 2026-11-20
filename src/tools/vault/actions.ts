@@ -10,6 +10,7 @@ import { userGroupIds, visibleGroups } from "@/lib/groups";
 import { getClass } from "@/tools/character/data/classes";
 import { toCampaignState } from "@/tools/character/proposal";
 import { RuleError, applyLevelUp, averageHp, buildCharacter, sanitizeFree, type CreationInput } from "@/tools/character/rules";
+import { normalizeImported } from "@/tools/character/transfer";
 import { MAX_LEVEL, type Answers, type CharacterRecord, type CharacterState } from "@/tools/character/types";
 import { VAULT_TOOL_ID } from "./meta";
 import { isEntityPlayer } from "@/tools/homunculus/entity";
@@ -92,6 +93,35 @@ export async function createDraftAction(input: CreationInput): Promise<VaultResu
       list.push({ id, ownerId: user.id, state, grantedLevel: MAX_LEVEL, snapshots: [{ level: 1, at: now, state }], createdAt: now, updatedAt: now });
     });
   });
+}
+
+/**
+ * Importe une fiche (fichier de l'outil ou personnage Foundry, converti dans le navigateur) comme nouvel essai.
+ * Rien n'est cru sur parole : la fiche est entièrement revérifiée ici. Elle reste dans le coffre ; pour jouer en
+ * campagne, elle passe par la proposition au MJ.
+ */
+export async function importDraftAction(state: unknown, source: "outil" | "foundry"): Promise<VaultResult & { warnings?: string[]; importedId?: string }> {
+  const user = await requireToolUser();
+  let warnings: string[] = [];
+  let importedId = "";
+  const r = await guard(user, async () => {
+    // L'import depuis Foundry est réservé au MJ (il le fait d'habitude directement dans la fiche de campagne du joueur).
+    if (source === "foundry" && user.role !== "admin") throw new RuleError("Seul ton MJ peut importer un personnage depuis Foundry.");
+    const result = normalizeImported(state);
+    warnings = result.warnings;
+    await updateDb((db) => {
+      const list = (db.vault ??= []);
+      if (list.filter((c) => c.ownerId === user.id).length >= MAX_DRAFTS) throw new RuleError(`Ton coffre est plein (${MAX_DRAFTS} essais). Supprimes-en un.`);
+      const now = new Date().toISOString();
+      const s: CharacterState = {
+        ...result.state,
+        history: [...result.state.history, { level: result.state.level, at: now, summary: ["Importé dans le coffre"], hpGain: 0 }],
+      };
+      importedId = randomUUID();
+      list.push({ id: importedId, ownerId: user.id, state: s, grantedLevel: MAX_LEVEL, snapshots: [{ level: s.level, at: now, state: s }], createdAt: now, updatedAt: now });
+    });
+  });
+  return r.ok ? { ...r, warnings, importedId } : r;
 }
 
 export async function saveDraftAction(id: string, patch: Partial<CharacterState>): Promise<VaultResult> {

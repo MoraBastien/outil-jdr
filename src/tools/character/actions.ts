@@ -11,6 +11,7 @@ import { getClass } from "./data/classes";
 import { foundryChecklist } from "./foundry";
 import { RuleError, applyLevelUp, averageHp, buildCharacter, sanitizeFree, shortLabel, type CreationInput } from "./rules";
 import { entitySheetOf, isEntityPlayer } from "@/tools/homunculus/entity";
+import { normalizeImported } from "./transfer";
 import { CHARACTER_TOOL_ID, MAX_LEVEL, type Answers, type CharacterRecord, type CharacterState, type HpMode } from "./types";
 
 type Snapshot = { level: number; at: string; state: CharacterState };
@@ -183,6 +184,37 @@ export async function createCharacterAction(input: CreationInput, groupId: strin
       db.proposals = (db.proposals ?? []).filter((p) => !(p.ownerId === owner && p.groupId === groupId));
     });
   });
+}
+
+/**
+ * MJ : importe la fiche d'un joueur (personnage Foundry ou fichier de l'outil, converti dans le navigateur) directement
+ * dans un groupe. La fiche est entièrement revérifiée ici ; les valeurs libres sont acceptées puisque c'est le MJ qui importe.
+ */
+export async function importCharacterAction(state: unknown, groupId: string, ownerId: string): Promise<ActionResult & { warnings?: string[] }> {
+  const user = await requireToolUser();
+  let warnings: string[] = [];
+  const r = await guard(user, async () => {
+    if (user.role !== "admin") throw new RuleError("Seul le MJ peut importer une fiche en campagne.");
+    const result = normalizeImported(state);
+    warnings = result.warnings;
+    await updateDb((db) => {
+      if (!(db.groups ?? []).some((g) => g.id === groupId)) throw new RuleError("Groupe introuvable.");
+      const target = db.users.find((u) => u.id === ownerId && u.role === "player");
+      if (target && isEntityPlayer(target)) throw new RuleError("Ce joueur incarne une entité : sa fiche n'est pas une fiche D&D.");
+      if (!target || !userGroupIds(target).includes(groupId)) throw new RuleError("Ce joueur ne fait pas partie de ce groupe.");
+      const list = (db.characters ??= []);
+      if (list.some((c) => c.ownerId === ownerId && c.groupId === groupId && !c.deadAt)) throw new RuleError("Ce joueur a déjà une fiche dans ce groupe.");
+      const now = new Date().toISOString();
+      const s: CharacterState = {
+        ...result.state,
+        history: [...result.state.history, { level: result.state.level, at: now, summary: ["Importé par le MJ"], hpGain: 0 }],
+      };
+      list.push({ id: randomUUID(), ownerId, groupId, state: s, grantedLevel: s.level, snapshots: [{ level: s.level, at: now, state: s }], createdAt: now, updatedAt: now });
+      // Une proposition venue du coffre pour ce groupe n'a plus lieu d'être.
+      db.proposals = (db.proposals ?? []).filter((p) => !(p.ownerId === ownerId && p.groupId === groupId));
+    });
+  });
+  return r.ok ? { ...r, warnings } : r;
 }
 
 export async function saveCharacterAction(characterId: string, patch: Partial<CharacterState>): Promise<ActionResult> {
