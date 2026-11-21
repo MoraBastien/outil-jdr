@@ -46,6 +46,12 @@ const ARMOR_FROM_BASE = Object.fromEntries(Object.entries(ARMOR_BASE).map(([k, v
 const weaponBase = (id: string) => id.replace(/-/g, "");
 const WEAPON_FROM_BASE = Object.fromEntries(WEAPONS.map((w) => [weaponBase(w.id), w.id]));
 
+/** Dons de style de combat : identifiant Foundry → option « fighting-style » de l'outil. */
+const FIGHTING_STYLE_IDS: Record<string, string> = {
+  archery: "archery", defense: "defense", dueling: "dueling", "great-weapon-fighting": "gwf", "two-weapon-fighting": "twf",
+  protection: "protection", interception: "interception", "blind-fighting": "blind", "thrown-weapon-fighting": "thrown", "unarmed-fighting": "unarmed",
+};
+
 const DAMAGE_TYPES: Record<string, string> = { contondant: "bludgeoning", perforant: "piercing", tranchant: "slashing" };
 const DAMAGE_TYPES_FR = Object.fromEntries(Object.entries(DAMAGE_TYPES).map(([k, v]) => [v, k]));
 
@@ -196,12 +202,21 @@ export function fromFoundryActor(raw: unknown): ImportResult {
   }
 
   // Dons généraux et d'origine reconnus (les capacités de classe viennent des données de l'outil).
+  // Les dons de style de combat deviennent le choix « Style de combat » de la classe.
   const otherFeats: string[] = [];
+  const styles: string[] = [];
   for (const f of ofType("feat").filter((f) => text(obj(obj(f.system).type).value) === "feat")) {
+    const style = FIGHTING_STYLE_IDS[ident(f)];
+    if (style || text(obj(obj(f.system).type).subtype) === "fightingStyle") {
+      if (style) styles.push(style);
+      else otherFeats.push(text(f.name));
+      continue;
+    }
     const feat = getFeat(ident(f));
     if (feat && !s.feats.some((x) => x.id === feat.id)) s.feats.push({ id: feat.id, source: "Foundry" });
     else otherFeats.push(text(f.name));
   }
+  if (styles.length) s.classChoices["fighting-style"] = styles;
 
   // PV : valeurs de l'avancement « Points de vie » de la classe (« max », un nombre, ou « avg »).
   const hpAdv = Object.values(obj(classSys.advancement)).map(obj).find((a) => a.type === "HitPoints");
@@ -262,6 +277,14 @@ export function fromFoundryActor(raw: unknown): ImportResult {
     text(langs.custom),
   ]
     .filter(Boolean)
+    .join(", ");
+  // Bottes d'arme choisies (« weapon:mar:greataxe » → greataxe).
+  const masteryKeys = obj(obj(traits.weaponProf).mastery).value;
+  s.masteries = (Array.isArray(masteryKeys) ? masteryKeys : [])
+    .map((k) => {
+      const id = WEAPON_FROM_BASE[String(k).split(":").pop() ?? ""];
+      return id ? WEAPONS.find((w) => w.id === id)!.name : String(k);
+    })
     .join(", ");
   const toolNames = new Set<string>(ofType("tool").map((t) => text(t.name)));
   for (const [k, v] of Object.entries(obj(sys.tools))) if (num(obj(v).value) >= 1 && ![...toolNames].length) toolNames.add(TOOLS[k] ?? k);
@@ -461,6 +484,15 @@ export function toFoundryActor(s: CharacterState): Obj {
       traits: {
         size: d.size.startsWith("P") ? "sm" : "med",
         languages: { value: langKeys, custom: langCustom.join(", ") },
+        weaponProf: {
+          mastery: {
+            value: s.masteries
+              .split(/[,;\n]/)
+              .map((m) => WEAPONS.find((w) => norm(w.name) === norm(m)))
+              .filter((w): w is (typeof WEAPONS)[number] => Boolean(w))
+              .map((w) => `${weaponBase(w.id)}`),
+          },
+        },
       },
     },
     items,

@@ -138,15 +138,35 @@ export function ImportCard({ busy, allowFoundry, onImport, onError }: { busy: bo
 }
 
 /** MJ : importer la fiche d'un joueur depuis Foundry (ou un fichier de l'outil), directement en campagne. */
-export function MjImportButton({ busy, name, onImport, onError }: { busy: boolean; name: string; onImport: (r: ReadImport) => void; onError: (msg: string) => void }) {
+export function MjImportButton({
+  busy,
+  name,
+  label = "⇧ Importer (Foundry)",
+  className = "btn btn-ghost btn-small",
+  onImport,
+  onError,
+}: {
+  busy: boolean;
+  name?: string;
+  label?: string;
+  className?: string;
+  onImport: (r: ReadImport) => void;
+  onError: (msg: string) => void;
+}) {
   return (
     <FilePicker
       allowFoundry
       onImport={onImport}
       onError={onError}
       render={(open) => (
-        <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={open} title={`Fichier « Export Data » d'un personnage Foundry, ou fiche exportée de l'outil, pour ${name}`}>
-          ⇧ Importer (Foundry)
+        <button
+          type="button"
+          className={className}
+          disabled={busy}
+          onClick={open}
+          title={`Fichier « Export Data » d'un personnage Foundry, ou fiche exportée de l'outil${name ? `, pour ${name}` : ""}`}
+        >
+          {label}
         </button>
       )}
     />

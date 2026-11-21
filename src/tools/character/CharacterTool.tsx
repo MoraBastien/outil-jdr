@@ -30,7 +30,7 @@ import {
 import CreationWizard from "./components/CreationWizard";
 import LevelUpWizard from "./components/LevelUpWizard";
 import Sheet from "./components/Sheet";
-import { ExportButtons, ImportNotes, MjImportButton } from "./components/TransferButtons";
+import { ExportButtons, ImportNotes, MjImportButton, type ReadImport } from "./components/TransferButtons";
 import { shortLabel, type CreationInput } from "./rules";
 import { MAX_LEVEL, type Answers, type CharacterRecord } from "./types";
 
@@ -255,6 +255,85 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
 
 /* ---------- Vue du MJ ---------- */
 
+/**
+ * Personnage lu dans un fichier Foundry : on montre ce qui a été lu, puis le MJ choisit à quel joueur (et dans quel
+ * groupe) il revient. Seuls les membres sans personnage vivant dans ce groupe peuvent le recevoir.
+ */
+function FoundryImportPanel({
+  read,
+  view,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  read: ReadImport;
+  view: CharacterView;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (groupId: string, ownerId: string) => void;
+}) {
+  const s = read.state;
+  // Joueurs D&D sans fiche dans un groupe (les joueurs de l'Atelier ont une autre fiche).
+  const targets = view.groups.flatMap((g) => g.members.filter((m) => !m.entry && !m.other).map((m) => ({ key: `${g.id}|${m.id}`, groupId: g.id, ownerId: m.id, label: `${m.name} · ${g.name}` })));
+  const [target, setTarget] = useState(targets[0]?.key ?? "");
+  const chosen = targets.find((t) => t.key === target);
+
+  return (
+    <form
+      className="cs-proposal-review"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (chosen) onConfirm(chosen.groupId, chosen.ownerId);
+      }}
+    >
+      <div className="stack-xs">
+        <p className="eyebrow">{read.source === "foundry" ? "Personnage Foundry" : "Fiche de l'outil"} lu</p>
+        <strong className="subtitle">{s.name}</strong>
+        <span className="muted">
+          {shortLabel(s)} · {s.skills.length} compétences · {s.weapons.length} arme{s.weapons.length > 1 ? "s" : ""} · {(s.grimoire ?? []).length} sorts reconnus
+        </span>
+      </div>
+      {read.warnings.length > 0 && (
+        <div className="stack-xs">
+          <span className="label">À vérifier après l&apos;import</span>
+          <ul className="muted small">
+            {read.warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {targets.length === 0 ? (
+        <p className="flash flash-error">
+          Tous les joueurs ont déjà un personnage dans leurs groupes. Pour importer celui-ci, déclare d&apos;abord la mort de l&apos;ancien personnage, ou ajoute le joueur à
+          un groupe.
+        </p>
+      ) : (
+        <label className="field">
+          <span className="label">Ce personnage revient à</span>
+          <select className="input" value={target} onChange={(e) => setTarget(e.target.value)}>
+            {targets.map((t) => (
+              <option key={t.key} value={t.key}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <div className="pl-actions">
+        {targets.length > 0 && (
+          <button className="btn" disabled={busy || !chosen}>
+            Importer {s.name}
+          </button>
+        )}
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          Annuler
+        </button>
+      </div>
+    </form>
+  );
+}
+
 type Selection =
   | { kind: "sheet"; characterId: string }
   | { kind: "create"; ownerId: string; ownerName: string; groupId: string; groupName: string }
@@ -282,6 +361,21 @@ function AdminPanel({
   /** Dernier import Foundry : ce qu'il faut vérifier sur la fiche créée. */
   const [importNotes, setImportNotes] = useState<{ id: string; source: "outil" | "foundry"; warnings: string[] } | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  /** Fichier Foundry lu, en attente du choix du joueur (bouton du haut de page). */
+  const [pendingImport, setPendingImport] = useState<ReadImport | null>(null);
+
+  /** Crée la fiche importée pour un joueur, l'ouvre et affiche ce qu'il faut vérifier. */
+  const importFor = async ({ state, warnings, source }: ReadImport, groupId: string, ownerId: string) => {
+    setImportError(null);
+    const res = (await run(importCharacterAction(state, groupId, ownerId))) as Awaited<ReturnType<typeof importCharacterAction>> | null;
+    if (!res?.ok) return false;
+    const created = res.view.groups.find((g) => g.id === groupId)?.members.find((m) => m.id === ownerId)?.entry;
+    if (created) {
+      pick(created.record.id);
+      setImportNotes({ id: created.record.id, source, warnings: Array.from(new Set([...warnings, ...(res.warnings ?? [])])) });
+    }
+    return true;
+  };
 
   const allEntries: AdminEntry[] = [...view.groups.flatMap((g) => g.members.flatMap((m) => (m.entry ? [m.entry] : []))), ...view.archived];
   const selected = sel?.kind === "sheet" ? allEntries.find((e) => e.record.id === sel.characterId) : undefined;
@@ -346,7 +440,7 @@ function AdminPanel({
     archivedLabel?: string,
     proposal?: PendingProposal | null,
     chip?: string,
-    importFor?: { groupId: string; ownerId: string },
+    importTarget?: { groupId: string; ownerId: string },
   ) => {
     const r = entry?.record;
     const pending = r && r.grantedLevel > r.state.level;
@@ -376,21 +470,8 @@ function AdminPanel({
               Créer pour {name}
             </button>
           )}
-          {!r && importFor && (
-            <MjImportButton
-              busy={busy}
-              name={name}
-              onError={setImportError}
-              onImport={async ({ state, warnings, source }) => {
-                const res = (await run(importCharacterAction(state, importFor.groupId, importFor.ownerId))) as Awaited<ReturnType<typeof importCharacterAction>> | null;
-                if (!res?.ok) return;
-                const created = res.view.groups.find((g) => g.id === importFor.groupId)?.members.find((m) => m.id === importFor.ownerId)?.entry;
-                if (created) {
-                  pick(created.record.id);
-                  setImportNotes({ id: created.record.id, source, warnings: Array.from(new Set([...warnings, ...(res.warnings ?? [])])) });
-                }
-              }}
-            />
+          {!r && importTarget && (
+            <MjImportButton busy={busy} name={name} onError={setImportError} onImport={(read) => void importFor(read, importTarget.groupId, importTarget.ownerId)} />
           )}
           {live && r.prepared && <span className="chip chip-ok">Choix du niv. {r.prepared.level} prêts</span>}
           {live && pending && (
@@ -417,7 +498,16 @@ function AdminPanel({
   return (
     <div className="cs-root stack-lg">
       <header className="stack-xs">
-        <p className="eyebrow">Maître du jeu</p>
+        <div className="cs-row-between">
+          <p className="eyebrow">Maître du jeu</p>
+          <MjImportButton
+            busy={busy}
+            label="⇧ Importer depuis Foundry"
+            className="btn btn-small"
+            onError={(msg) => (setPendingImport(null), setImportError(msg))}
+            onImport={(read) => (setImportError(null), setPendingImport(read))}
+          />
+        </div>
         <h1 className="title">Fiches des personnages</h1>
         <p className="muted">
           Chaque joueur a une fiche par groupe. Accorde un niveau : un bouton « Monter de niveau » s&apos;allume sur son tableau de bord. Une copie de chaque
@@ -432,6 +522,17 @@ function AdminPanel({
             ×
           </button>
         </p>
+      )}
+      {pendingImport && (
+        <FoundryImportPanel
+          read={pendingImport}
+          view={view}
+          busy={busy}
+          onCancel={() => setPendingImport(null)}
+          onConfirm={async (groupId, ownerId) => {
+            if (await importFor(pendingImport, groupId, ownerId)) setPendingImport(null);
+          }}
+        />
       )}
 
       {view.groups.length === 0 && <p className="flash flash-error">Aucun groupe de jeu : crée un groupe et ajoutes-y des joueurs dans l&apos;administration.</p>}

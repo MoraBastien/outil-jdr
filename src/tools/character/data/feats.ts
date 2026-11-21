@@ -56,7 +56,7 @@ export const FEATS: Feat[] = [
   { id: "telekinetic", name: "Télékinésiste", kind: "general", desc: "Main de mage invisible ; pousse une créature en action bonus.", abilities: ["int", "wis", "cha"] },
   { id: "telepathic", name: "Télépathe", kind: "general", desc: "Télépathie à 18 m et Détection des pensées une fois par jour.", abilities: ["int", "wis", "cha"] },
   { id: "war-caster", name: "Mage de guerre", kind: "general", desc: "Avantage en concentration, sort en attaque d'opportunité.", abilities: ["int", "wis", "cha"] },
-  { id: "weapon-master", name: "Maître d'armes", kind: "general", desc: "Une propriété de maîtrise d'arme de plus.", abilities: ["str", "dex"] },
+  { id: "weapon-master", name: "Maître d'armes", kind: "general", desc: "Une botte d'arme de plus.", abilities: ["str", "dex"] },
 ];
 
 export const getFeat = (id: string) => FEATS.find((f) => f.id === id);

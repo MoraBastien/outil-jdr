@@ -63,9 +63,9 @@ const subclass = (label: string, desc: string): Feature => ({
   choice: { kind: "subclass", key: "subclass", label },
 });
 const mastery = (n: number): Feature => ({
-  name: "Maîtrise des armes",
-  desc: `Tu peux utiliser la propriété de maîtrise de ${n} types d'armes (Coup de bouclier, Ouverture, Ralentissement…). Tu peux en changer après un repos long.`,
-  tip: "Note tes armes maîtrisées dans l'onglet Équipement. La propriété de maîtrise est indiquée dans la liste des armes.",
+  name: "Bottes d'arme",
+  desc: `Tu peux utiliser la botte de ${n} types d'armes courantes ou de guerre (Ouverture, Ralentissement, Sape…). Après un repos long, tu peux changer l'un de ces choix.`,
+  tip: "Note tes bottes d'arme dans l'onglet Équipement. La botte de chaque arme est indiquée dans la liste des armes.",
 });
 
 export const CLASSES: ClassDef[] = [
@@ -108,7 +108,7 @@ export const CLASSES: ClassDef[] = [
           choice: { kind: "skills", key: "primal-knowledge", label: "Compétence de barbare", count: 1, from: ["animal", "athletics", "intimidation", "nature", "perception", "survival"] },
         },
       ],
-      4: [asi, { name: "Maîtrise des armes (3)", desc: "Tu maîtrises désormais 3 types d'armes." }],
+      4: [asi, { name: "Bottes d'arme (3)", desc: "Tu connais désormais la botte de 3 types d'armes." }],
     },
     subclasses: [
       { id: "berserker", name: "Voie du berserker", desc: "La fureur à l'état pur.", features: [{ name: "Frénésie", desc: "En rage, avec une attaque téméraire, la première cible touchée subit des dégâts en plus (d6 × dégâts de rage)." }] },
@@ -283,7 +283,7 @@ export const CLASSES: ClassDef[] = [
         { name: "Esprit tactique", desc: "Après un test raté, dépense un second souffle pour ajouter 1d10 au résultat." },
       ],
       3: [subclass("Archétype martial", "Choisis ton archétype.")],
-      4: [asi, { name: "Maîtrise des armes (4)", desc: "Tu maîtrises désormais 4 types d'armes." }],
+      4: [asi, { name: "Bottes d'arme (4)", desc: "Tu connais désormais la botte de 4 types d'armes." }],
     },
     subclasses: [
       { id: "battle-master", name: "Maître de guerre", desc: "Le tacticien aux manœuvres.", features: [{ name: "Supériorité au combat", desc: "4 dés de supériorité (d8) et 3 manœuvres (Désarmer, Feinte, Riposte…)." }, { name: "Élève de la guerre", desc: "Un outil d'artisan et une compétence de guerrier en plus." }] },

@@ -567,13 +567,13 @@ export default function Sheet({
                 {MASTERY_COUNT[s.classId] && (
                   <div>
                     <dt>
-                      Armes maîtrisées ({MASTERY_COUNT[s.classId][s.level - 1]}){" "}
+                      Bottes d&apos;arme ({MASTERY_COUNT[s.classId][s.level - 1]}){" "}
                       <Hint>
-                        Tu utilises la propriété de maîtrise de ces armes. {Object.entries(MASTERY_HELP).map(([k, v]) => `${k} : ${v}`).join(" ")}
+                        Tu peux utiliser la botte de ces types d&apos;armes. {Object.entries(MASTERY_HELP).map(([k, v]) => `${k} : ${v}`).join(" ")}
                       </Hint>
                     </dt>
                     <dd>
-                      <TextField value={s.masteries} onCommit={(v) => patch({ masteries: v })} disabled={!editable} label="Armes maîtrisées" placeholder="Ex. Épée courte, arc court" />
+                      <TextField value={s.masteries} onCommit={(v) => patch({ masteries: v })} disabled={!editable} label="Bottes d'arme" placeholder="Ex. Épée courte, arc court" />
                     </dd>
                   </div>
                 )}

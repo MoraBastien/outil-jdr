@@ -125,7 +125,7 @@ export function weaponFromCatalog(s: CharacterState, id: string, key: string): W
     ability,
     proficient: weaponProficient(s, w),
     damage: `${w.damage} ${w.type}`,
-    notes: `${w.props}${w.mastery ? ` · Maîtrise : ${w.mastery}` : ""}`,
+    notes: `${w.props}${w.mastery ? ` · Botte : ${w.mastery}` : ""}`,
   };
 }
 
