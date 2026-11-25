@@ -106,6 +106,7 @@ export async function deletePlayer(formData: FormData): Promise<void> {
     db.diceLog = (db.diceLog ?? []).filter((d) => d.userId !== id);
     for (const poll of db.polls ?? []) delete poll.responses[id];
     db.proposals = (db.proposals ?? []).filter((p) => p.ownerId !== id);
+    db.concepts = (db.concepts ?? []).filter((c) => c.ownerId !== id);
   });
   back("/admin", { ok: name ? `${name} supprimé.` : "Joueur introuvable." });
 }
@@ -156,6 +157,7 @@ export async function deleteGroup(formData: FormData): Promise<void> {
     db.polls = (db.polls ?? []).filter((p) => p.groupId !== id);
     db.graves = (db.graves ?? []).filter((g) => g.groupId !== id);
     db.proposals = (db.proposals ?? []).filter((p) => p.groupId !== id);
+    db.concepts = (db.concepts ?? []).filter((c) => c.groupId !== id);
     db.chronicle = (db.chronicle ?? []).filter((s) => s.groupId !== id);
     db.quests = (db.quests ?? []).filter((q) => q.groupId !== id);
   });

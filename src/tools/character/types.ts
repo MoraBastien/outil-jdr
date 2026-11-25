@@ -68,8 +68,13 @@ export type CharacterState = {
   backgroundId: string;
   level: number;
 
-  /** "free" : valeurs saisies librement (3 à 18), seulement dans le coffre. */
-  scoreMethod: "standard" | "pointbuy" | "free";
+  /**
+   * "roll" : 4d6 (le plus bas retiré) lancés par le serveur, la règle des fiches de campagne.
+   * "free" : valeurs saisies librement (3 à 18), seulement dans le coffre. "standard" / "pointbuy" : anciennes fiches et coffre.
+   */
+  scoreMethod: "roll" | "standard" | "pointbuy" | "free";
+  /** Méthode "roll" : nombre de lancers faits avant la création (1 = aucune relance), visible par le MJ. */
+  scoreRolls?: number;
   /** Valeurs choisies (tableau standard ou achat de points), avant bonus. */
   baseScores: Scores;
   /** Bonus d'historique : +2/+1 ou +1/+1/+1. */

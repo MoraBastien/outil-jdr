@@ -189,6 +189,14 @@ function SessionCard({
           <div className="stack-xs">
             <span className="chr-date">
               Séance {s.number} · {fmtDate(s.date)}
+              {s.island && (
+                <>
+                  {" · "}
+                  <span className="chr-isle" style={{ ["--isle-c" as string]: s.island.color }}>
+                    {s.island.name}
+                  </span>
+                </>
+              )}
             </span>
             <h3 className="chr-title">{s.title}</h3>
           </div>
@@ -271,6 +279,7 @@ function SessionEditor({
   const [title, setTitle] = useState(session?.title ?? "");
   const [summary, setSummary] = useState(session?.summary ?? "");
   const [draft, setDraft] = useState(session?.draft ?? false);
+  const [islandId, setIslandId] = useState<string>(session ? (session.island?.id ?? "") : (group.harborId ?? ""));
   const [rows, setRows] = useState<Row[]>(
     () => session?.moments.map((m, i) => ({ key: i, kind: m.kind, text: m.text, characterIds: m.characters.map((c) => c.id), source: m.source })) ?? [],
   );
@@ -290,7 +299,7 @@ function SessionEditor({
       className="chr-editor"
       onSubmit={(e) => {
         e.preventDefault();
-        onSave({ id: session?.id ?? null, groupId: group.id, date, title, summary, draft, moments: rows.map(({ kind, text, characterIds, source }) => ({ kind, text, characterIds, source })) });
+        onSave({ id: session?.id ?? null, groupId: group.id, date, title, summary, draft, islandId: islandId || null, moments: rows.map(({ kind, text, characterIds, source }) => ({ kind, text, characterIds, source })) });
       }}
     >
       <h2 className="subtitle">{session ? `Modifier la séance ${session.number}` : `Nouvelle séance · ${group.name}`}</h2>
@@ -303,6 +312,19 @@ function SessionEditor({
           <span className="label">Titre</span>
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required placeholder="Ex. La crypte du roi-liche" autoFocus />
         </label>
+        {group.islands.length > 0 && (
+          <label className="field">
+            <span className="label">Escale (île)</span>
+            <select className="input" value={islandId} onChange={(e) => setIslandId(e.target.value)}>
+              <option value="">Aucune</option>
+              {group.islands.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       <label className="field">
         <span className="label">Résumé</span>

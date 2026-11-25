@@ -14,7 +14,7 @@ export default async function LoginPage() {
           ✦
         </span>
         <div className="stack-xs">
-          <h1 className="title">Outils de la table</h1>
+          <h1 className="title">Le Navire</h1>
           <p className="muted">Entre le code que ton MJ t&apos;a donné.</p>
         </div>
         <LoginForm />

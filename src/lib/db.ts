@@ -124,6 +124,22 @@ export type Proposal = {
   updatedAt: string;
 };
 
+/**
+ * Concept de personnage : un joueur décrit l'idée de son personnage (espèce et classe facultatives),
+ * et son MJ l'aide à créer la fiche. « done » quand le MJ l'a traité ou que la fiche est créée.
+ */
+export type CharacterConcept = {
+  id: string;
+  ownerId: string;
+  groupId: string;
+  speciesId: string | null;
+  classId: string | null;
+  text: string;
+  status: "pending" | "done";
+  createdAt: string;
+  updatedAt: string;
+};
+
 /** Tombe du cimetière d'une campagne : garde la mémoire d'un personnage mort. */
 export type Grave = {
   id: string;
@@ -157,6 +173,8 @@ export type ChronicleSession = {
   moments: ChronicleMoment[];
   /** Brouillon : visible du MJ seulement. */
   draft: boolean;
+  /** Île de l'escale (outil « Carte ») : la suite des séances trace la route du Navire. */
+  islandId?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -184,8 +202,96 @@ export type Quest = {
   updatedAt: string;
 };
 
-/** Groupe de jeu (une table, une campagne). Les membres sont les joueurs dont `groupIds` contient son id. */
-export type Group = { id: string; name: string; createdAt: string };
+/**
+ * Groupe de jeu (une table, une campagne). Les membres sont les joueurs dont `groupIds` contient son id.
+ * `harborIslandId` : île où mouille le Navire (ses échoppes sont ouvertes, sa couleur teinte le site).
+ * `nextIslandId` : prochaine escale annoncée.
+ * `mapImage` : image de fond de la carte du groupe (chemin dans `public/` ou URL https). Absent : carte dessinée par le site.
+ * `shipName` : nom du navire du groupe (outil « Équipage »). Absent : « le Navire ».
+ */
+export type Group = { id: string; name: string; createdAt: string; harborIslandId?: string | null; nextIslandId?: string | null; mapImage?: string | null; shipName?: string | null };
+
+/**
+ * Membre d'équipage du navire d'un groupe (outil « Équipage »).
+ * `notes` : note du MJ, jamais envoyée aux joueurs. `hidden` : membre que seul le MJ voit.
+ */
+export type CrewMember = {
+  id: string;
+  groupId: string;
+  name: string;
+  nickname: string;
+  role: string;
+  trait: string;
+  notes: string;
+  hidden: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Île de l'archipel d'un groupe (outil « Carte »). Position en % de la carte (0 à 100).
+ * hidden : connue du MJ seulement ; seen : aperçue (nom visible) ; visited : escale vécue.
+ */
+export type IslandStatus = "hidden" | "seen" | "visited";
+export type Island = {
+  id: string;
+  groupId: string;
+  name: string;
+  /** Couleur de l'île (une des teintes proposées), reprise par le thème du site quand le Navire y mouille. */
+  color: string;
+  x: number;
+  y: number;
+  status: IslandStatus;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Objet vendu dans une échoppe. Prix en pièces de cuivre (1 po = 100 pc). `stock` null : illimité. */
+export type ShopItem = { id: string; name: string; desc: string; priceCp: number; stock: number | null };
+/** Échoppe d'une île (outil « Marché ») : ouverte quand le Navire mouille sur son île. */
+export type Shop = {
+  id: string;
+  groupId: string;
+  islandId: string;
+  name: string;
+  kind: string;
+  blurb: string;
+  items: ShopItem[];
+  createdAt: string;
+  updatedAt: string;
+};
+/** Achat au marché (payé avec les pièces de la fiche). Le MJ peut l'annuler (remboursement + retrait de l'équipement). */
+export type Purchase = {
+  id: string;
+  groupId: string;
+  islandId: string;
+  shopId: string;
+  userId: string;
+  characterId: string;
+  lines: { itemId: string; name: string; qty: number; priceCp: number }[];
+  totalCp: number;
+  /** Ligne ajoutée à l'équipement de la fiche (retirée en cas d'annulation). */
+  equipmentLine: string;
+  createdAt: string;
+  cancelledAt?: string;
+};
+
+/**
+ * Journal « Activité à bord » d'un groupe : ce qui s'est passé entre les séances (achats, présences, journal publié…).
+ * Écrit côté serveur seulement ; `key` évite les doublons (ex. une seule ligne par joueur et par sondage).
+ */
+export type Activity = {
+  id: string;
+  groupId: string;
+  /** Auteur (joueur), absent pour le MJ ou le Navire. */
+  actorId?: string;
+  kind: "purchase" | "presence" | "chronicle" | "quest" | "levelup" | "character" | "death" | "harbor" | "shop";
+  text: string;
+  href?: string;
+  key?: string;
+  at: string;
+};
 
 export type Db = {
   users: User[];
@@ -198,8 +304,14 @@ export type Db = {
   vault?: StoredCharacter[];
   graves?: Grave[];
   proposals?: Proposal[];
+  concepts?: CharacterConcept[];
   chronicle?: ChronicleSession[];
   quests?: Quest[];
+  islands?: Island[];
+  shops?: Shop[];
+  crew?: CrewMember[];
+  purchases?: Purchase[];
+  activity?: Activity[];
 };
 
 // ---------------------------------------------------------------------------
@@ -352,6 +464,10 @@ export async function getGroups(): Promise<Group[]> {
   return ((await load()).groups ?? []).sort((a, b) => a.name.localeCompare(b.name, "fr"));
 }
 
+export async function getConcepts(): Promise<CharacterConcept[]> {
+  return (await load()).concepts ?? [];
+}
+
 export async function getProposals(): Promise<Proposal[]> {
   return (await load()).proposals ?? [];
 }
@@ -362,6 +478,29 @@ export async function getChronicle(): Promise<ChronicleSession[]> {
 
 export async function getQuests(): Promise<Quest[]> {
   return (await load()).quests ?? [];
+}
+
+export async function getIslands(): Promise<Island[]> {
+  return (await load()).islands ?? [];
+}
+
+export async function getShops(): Promise<Shop[]> {
+  return (await load()).shops ?? [];
+}
+
+export async function getCrew(): Promise<CrewMember[]> {
+  return (await load()).crew ?? [];
+}
+
+export async function getPurchases(): Promise<Purchase[]> {
+  return (await load()).purchases ?? [];
+}
+
+export async function getActivity(groupId: string, limit = 20): Promise<Activity[]> {
+  return ((await load()).activity ?? [])
+    .filter((a) => a.groupId === groupId)
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, limit);
 }
 
 export async function getPolls(): Promise<Poll[]> {

@@ -6,15 +6,32 @@ import { clampEcho } from "@/tools/homunculus/echo";
 import PageMain from "@/components/PageMain";
 import { entitySheetOf, isEntityPlayer } from "@/tools/homunculus/entity";
 import { ASTRAL_LABELS, NAV_GLYPHS, skyLine } from "@/tools/homunculus/astral/theme";
+import { getPlayerDashboard } from "@/lib/dashboard";
+import PlayerDashboard from "@/components/dashboard/PlayerDashboard";
+import AdminActivity from "@/components/dashboard/AdminActivity";
 
 function greeting(): string {
   const hour = Number(new Intl.DateTimeFormat("fr-FR", { hour: "numeric", hour12: false, timeZone: "Europe/Paris" }).format(new Date()));
   return hour >= 18 || hour < 5 ? "Bonsoir" : "Bonjour";
 }
 
-export default async function HomePage() {
+export default async function HomePage({ searchParams }: { searchParams: Promise<{ groupe?: string }> }) {
   const user = await requireUser();
   const isAdmin = user.role === "admin";
+
+  // Joueur (hors Entité) : le tableau de bord du Navire (l'histoire, mon personnage, l'escale).
+  if (!isAdmin && !isEntityPlayer(user)) {
+    const { groupe } = await searchParams;
+    const data = await getPlayerDashboard(user, groupe);
+    return (
+      <>
+        <Header user={user} />
+        <PageMain className="page page-dash">
+          <PlayerDashboard data={data} greeting={greeting()} name={user.name} />
+        </PageMain>
+      </>
+    );
+  }
   const tools = TOOLS.filter((t) => canUseTool(user, t.id));
   // Tableau de bord : un panneau par outil qui en propose un, dans l'ordre demandé.
   const widgets = tools
@@ -61,6 +78,12 @@ export default async function HomePage() {
                 </Widget>
               );
             })}
+
+            {isAdmin && (
+              <Widget title="Activité à bord" icon="⚓" wide>
+                <AdminActivity />
+              </Widget>
+            )}
 
             {hasProfile && (
               <Widget title="Ma fiche" icon="📜">

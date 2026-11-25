@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Outils de la table",
-    short_name: "Table JDR",
+    name: "Le Navire",
+    short_name: "Le Navire",
     description: "Fiches, planning et coffre de la table, entre les sessions.",
     start_url: "/accueil",
     scope: "/",

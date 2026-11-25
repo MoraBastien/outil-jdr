@@ -2,7 +2,8 @@
 // Actions serveur de la chronique : une frise des séances par groupe. Le MJ écrit, les membres lisent.
 
 import { requireUser, canUseTool } from "@/lib/auth";
-import { getCharacters, getChronicle, getGraves, getGroups, getPolls, getQuests, getUsers, randomUUID, updateDb, type ChronicleMoment, type User } from "@/lib/db";
+import { getCharacters, getChronicle, getGraves, getGroups, getIslands, getPolls, getQuests, getUsers, randomUUID, updateDb, type ChronicleMoment, type User } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
 import { visibleGroups } from "@/lib/groups";
 import { tableToday } from "@/tools/planning/summary";
 import type { CharacterState } from "@/tools/character/types";
@@ -18,6 +19,8 @@ export type SessionView = {
   title: string;
   summary: string;
   draft: boolean;
+  /** Île de l'escale (outil « Carte »). */
+  island: { id: string; name: string; color: string } | null;
   moments: MomentView[];
   /** Quêtes lancées ou terminées à cette séance (outil « Quêtes »). `hidden` : cachée des joueurs (MJ seulement). */
   quests: { id: string; title: string; event: "start" | "done" | "failed"; hidden: boolean }[];
@@ -35,6 +38,10 @@ export type ChronicleGroup = {
   pending: DetectedEvent[];
   /** MJ : date proposée pour une nouvelle séance (dernière session confirmée du planning). */
   suggestedDate: string;
+  /** MJ : îles de la carte du groupe, pour rattacher une séance à son escale. */
+  islands: { id: string; name: string }[];
+  /** MJ : île où mouille le Navire (proposée pour une nouvelle séance). */
+  harborId: string | null;
 };
 export type ChronicleView = { isAdmin: boolean; groups: ChronicleGroup[] };
 export type ChronicleResult = { ok: true; view: ChronicleView } | { ok: false; error: string };
@@ -46,6 +53,7 @@ export type SessionInput = {
   title: string;
   summary: string;
   draft: boolean;
+  islandId?: string | null;
   moments: { kind: string; text: string; characterIds: string[]; source?: string }[];
 };
 
@@ -58,7 +66,7 @@ async function requireToolUser(): Promise<User> {
 }
 
 async function view(user: User): Promise<ChronicleView> {
-  const [allGroups, sessions, chars, graves, users, polls, quests] = await Promise.all([
+  const [allGroups, sessions, chars, graves, users, polls, quests, islands] = await Promise.all([
     getGroups(),
     getChronicle(),
     getCharacters(),
@@ -66,6 +74,7 @@ async function view(user: User): Promise<ChronicleView> {
     getUsers(),
     getPolls(),
     getQuests(),
+    getIslands(),
   ]);
   const isAdmin = user.role === "admin";
   const today = tableToday();
@@ -86,6 +95,10 @@ async function view(user: User): Promise<ChronicleView> {
           title: s.title,
           summary: s.summary,
           draft: s.draft,
+          island: (() => {
+            const i = islands.find((x) => x.id === s.islandId && (isAdmin || x.status !== "hidden"));
+            return i ? { id: i.id, name: i.name, color: i.color } : null;
+          })(),
           moments: s.moments.map((m) => ({ ...m, mine: m.characters.some((c) => mineIds.has(c.id)) })),
           quests: quests
             .filter((q) => q.groupId === g.id && (isAdmin || q.visible) && q.status !== "todo")
@@ -135,6 +148,8 @@ async function view(user: User): Promise<ChronicleView> {
           : [],
         pending: isAdmin ? detectedEvents(g.id, chars, graves, sessions) : [],
         suggestedDate: confirmed.at(-1) ?? today,
+        islands: isAdmin ? islands.filter((i) => i.groupId === g.id).map((i) => ({ id: i.id, name: i.name })) : [],
+        harborId: isAdmin ? (g.harborIslandId ?? null) : null,
       };
     }),
   };
@@ -181,13 +196,23 @@ export async function saveSessionAction(input: SessionInput): Promise<ChronicleR
     }
     const now = new Date().toISOString();
     const list = (db.chronicle ??= []);
+    const islandId = input.islandId && (db.islands ?? []).some((i) => i.id === input.islandId && i.groupId === groupId) ? String(input.islandId) : null;
+    const draft = Boolean(input.draft);
+    let id = input.id ? String(input.id) : "";
+    let published = !draft;
     if (input.id) {
       const s = list.find((x) => x.id === input.id);
       if (!s) return "Séance introuvable.";
-      Object.assign(s, { groupId, date, title, summary, moments, draft: Boolean(input.draft), updatedAt: now });
+      published = s.draft && !draft; // brouillon qu'on publie maintenant
+      Object.assign(s, { groupId, date, title, summary, moments, draft, islandId, updatedAt: now });
     } else {
-      list.push({ id: randomUUID(), groupId, date, title, summary, moments, draft: Boolean(input.draft), createdAt: now, updatedAt: now });
+      id = randomUUID();
+      list.push({ id, groupId, date, title, summary, moments, draft, islandId, createdAt: now, updatedAt: now });
     }
+    // Une escale racontée : l'île devient « visitée ».
+    const island = islandId ? (db.islands ?? []).find((i) => i.id === islandId) : undefined;
+    if (island && !draft && island.status !== "visited") island.status = "visited";
+    if (published) logActivity(db, { groupId, kind: "chronicle", text: `Le journal de bord est publié : « ${title} »${island ? `, à ${island.name}` : ""}.`, href: "/outils/chronique", key: `chronicle:${id}` });
     return null;
   });
 }

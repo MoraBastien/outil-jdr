@@ -5,6 +5,7 @@
 import { requireUser, canUseTool } from "@/lib/auth";
 import { getCharacters, getChronicle, getGroups, getQuests, randomUUID, updateDb, type Db, type Quest, type User } from "@/lib/db";
 import { visibleGroups } from "@/lib/groups";
+import { logActivity } from "@/lib/activity";
 import type { CharacterState } from "@/tools/character/types";
 import { QUESTS_TOOL_ID, isQuestStatus, type QuestStatus } from "./meta";
 
@@ -156,8 +157,13 @@ export async function setQuestStatusAction(questId: string, status: QuestStatus,
     } else {
       q.endSessionId = sid;
     }
+    const was = q.status;
     q.status = status;
     q.updatedAt = now;
+    if (was !== status && q.visible) {
+      const text = status === "open" ? `Nouvelle quête : ${q.title}.` : status === "done" ? `Quête accomplie : ${q.title} !` : status === "failed" ? `Quête échouée : ${q.title}.` : null;
+      if (text) logActivity(db, { groupId: q.groupId, kind: "quest", text, href: `/outils/quetes?quete=${q.id}`, key: `quest:${q.id}` });
+    }
     return null;
   });
 }
@@ -166,8 +172,10 @@ export async function setQuestVisibleAction(questId: string, visible: boolean): 
   return adminChange((db, now) => {
     const q = findQuest(db, questId);
     if (!q) return "Quête introuvable.";
+    const revealed = !q.visible && Boolean(visible);
     q.visible = Boolean(visible);
     q.updatedAt = now;
+    if (revealed && q.status === "open") logActivity(db, { groupId: q.groupId, kind: "quest", text: `Nouvelle quête : ${q.title}.`, href: `/outils/quetes?quete=${q.id}`, key: `quest:${q.id}` });
     return null;
   });
 }

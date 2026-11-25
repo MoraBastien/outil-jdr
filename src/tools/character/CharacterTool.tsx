@@ -15,6 +15,10 @@ import {
   grantGroupLevelAction,
   prepareLevelUpAction,
   refuseProposalAction,
+  resolveConceptAction,
+  rollAbilityScoresAction,
+  saveConceptAction,
+  withdrawConceptAction,
   deleteCharacterAction,
   getCharacterViewAction,
   grantLevelAction,
@@ -22,11 +26,14 @@ import {
   saveCharacterAction,
   type ActionResult,
   type AdminEntry,
+  type ConceptData,
   type CharacterView,
   type MyProposal,
   type PendingProposal,
 } from "./actions";
 import CreationWizard from "./components/CreationWizard";
+import { CLASSES } from "./data/classes";
+import { SPECIES } from "./data/origins";
 import LevelUpWizard from "./components/LevelUpWizard";
 import Sheet from "./components/Sheet";
 import { shortLabel, type CreationInput } from "./rules";
@@ -240,7 +247,14 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
                 puis propose-le à ton MJ.
               </p>
             </div>
-            <CreationWizard busy={busy} onCreate={async (input: CreationInput) => Boolean((await run(createCharacterAction(input, current.group.id)))?.ok)} />
+            <NewCharacter
+              key={current.group.id}
+              concept={current.concept}
+              busy={busy}
+              onCreate={async (input: CreationInput) => Boolean((await run(createCharacterAction(input, current.group.id)))?.ok)}
+              onSendConcept={async (c) => Boolean((await run(saveConceptAction(current.group.id, c)))?.ok)}
+              onWithdrawConcept={() => run(withdrawConceptAction(current.group.id))}
+            />
           </>
         )}
       </div>
@@ -252,7 +266,8 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
 
 type Selection =
   | { kind: "sheet"; characterId: string }
-  | { kind: "create"; ownerId: string; ownerName: string; groupId: string; groupName: string }
+  | { kind: "create"; ownerId: string; ownerName: string; groupId: string; groupName: string; initial?: { classId: string | null; speciesId: string | null } }
+  | { kind: "concept"; concept: ConceptData; ownerId: string; ownerName: string; groupId: string; groupName: string }
   | { kind: "proposal"; proposalId: string }
   | null;
 
@@ -313,6 +328,8 @@ function AdminPanel({
         <CreationWizard
           forName={`${sel.ownerName} (${sel.groupName})`}
           busy={busy}
+          initial={sel.initial}
+          onRollScores={() => rollAbilityScoresAction()}
           onCancel={() => setSel(null)}
           onCreate={async (input) => {
             const r = await run(createCharacterAction(input, sel.groupId, sel.ownerId));
@@ -327,9 +344,60 @@ function AdminPanel({
     );
   }
 
+  if (sel?.kind === "concept") {
+    const c = sel.concept;
+    return (
+      <div className="cs-root stack-lg">
+        {errorBox}
+        <article className="cs-concept-review stack">
+          <div className="stack-xs">
+            <p className="eyebrow">Concept de personnage · {sel.groupName}</p>
+            <h1 className="title">{sel.ownerName} a une idée</h1>
+            <span className="muted small">
+              Envoyé le {new Date(c.createdAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}
+              {c.updatedAt !== c.createdAt ? ` · modifié le ${new Date(c.updatedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}` : ""}
+            </span>
+          </div>
+          <div className="chips">
+            <span className="chip">Espèce : {c.speciesName ?? "à définir"}</span>
+            <span className="chip">Classe : {c.className ?? "à définir"}</span>
+          </div>
+          <blockquote className="cs-concept-text">{c.text}</blockquote>
+          <div className="pl-actions">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setSel({ kind: "create", ownerId: sel.ownerId, ownerName: sel.ownerName, groupId: sel.groupId, groupName: sel.groupName, initial: { classId: c.classId, speciesId: c.speciesId } })}
+            >
+              Créer la fiche pour {sel.ownerName}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy}
+              onClick={async () => {
+                const r = await run(resolveConceptAction(c.id));
+                if (r?.ok) setSel(null);
+              }}
+            >
+              Marquer comme traité
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => setSel(null)}>
+              Retour
+            </button>
+          </div>
+          <p className="muted small">
+            « Créer la fiche » ouvre l&apos;assistant avec l&apos;espèce et la classe proposées. Le concept est marqué comme traité dès que la fiche du joueur
+            existe dans ce groupe.
+          </p>
+        </article>
+      </div>
+    );
+  }
+
   /** `archivedLabel` : fiche hors groupe (lecture seule, pas de montée de niveau). */
   /** `chip` : pastille fournie par le serveur (fiche d'un autre type). */
-  const rosterItem = (key: string, name: string, entry: AdminEntry | null, onCreate?: () => void, archivedLabel?: string, proposal?: PendingProposal | null, chip?: string) => {
+  const rosterItem = (key: string, name: string, entry: AdminEntry | null, onCreate?: () => void, archivedLabel?: string, proposal?: PendingProposal | null, chip?: string, onConcept?: () => void) => {
     const r = entry?.record;
     const pending = r && r.grantedLevel > r.state.level;
     // Fiche venue d'un autre outil : son niveau ne s'accorde pas ici.
@@ -342,12 +410,25 @@ function AdminPanel({
           </span>
           <span className="stack-xs">
             <strong>{r ? r.state.name : name}</strong>
-            <span className="muted small">{r ? `${name} · ${shortLabel(r.state)}` : proposal ? `Propose ${proposal.state.name} (${shortLabel(proposal.state)})` : "Pas encore de fiche"}</span>
+            <span className="muted small">
+              {r
+                ? `${name} · ${shortLabel(r.state)}${!archivedLabel && r.state.scoreRolls && r.state.scoreRolls > 1 ? ` · ${r.state.scoreRolls - 1} relance${r.state.scoreRolls > 2 ? "s" : ""} des caractéristiques` : ""}`
+                : proposal
+                  ? `Propose ${proposal.state.name} (${shortLabel(proposal.state)})`
+                  : onConcept
+                    ? "A envoyé un concept de personnage"
+                    : "Pas encore de fiche"}
+            </span>
             {archivedLabel && <span className="muted small">{archivedLabel}</span>}
           </span>
         </button>
         <div className="cs-roster-actions">
           {chip && <span className="chip chip-violet">{chip}</span>}
+          {!r && onConcept && (
+            <button type="button" className="btn btn-small" onClick={onConcept}>
+              💡 Lire le concept
+            </button>
+          )}
           {!r && proposal && (
             <button type="button" className="btn btn-small" onClick={() => setSel({ kind: "proposal", proposalId: proposal.id })}>
               🗝️ Examiner la proposition
@@ -447,6 +528,7 @@ function AdminPanel({
                   undefined,
                   m.proposal,
                   m.other?.chip,
+                  m.concept ? () => setSel({ kind: "concept", concept: m.concept!, ownerId: m.id, ownerName: m.name, groupId: g.id, groupName: g.name }) : undefined,
                 ),
               )}
             </ul>
@@ -766,5 +848,172 @@ function ProposalReview({
         onSave={async () => false}
       />
     </section>
+  );
+}
+
+/* ---------- Joueur : nouveau personnage (création classique ou concept) ---------- */
+
+function NewCharacter({
+  concept,
+  busy,
+  onCreate,
+  onSendConcept,
+  onWithdrawConcept,
+}: {
+  concept: ConceptData | null;
+  busy: boolean;
+  onCreate: (input: CreationInput) => Promise<boolean>;
+  onSendConcept: (c: { speciesId: string | null; classId: string | null; text: string }) => Promise<boolean>;
+  onWithdrawConcept: () => void;
+}) {
+  const [mode, setMode] = useState<"choose" | "classic" | "concept">("choose");
+
+  if (mode === "classic") {
+    return (
+      <div className="stack">
+        <div>
+          <button type="button" className="btn btn-ghost btn-small" onClick={() => setMode("choose")}>
+            ← Changer de méthode
+          </button>
+        </div>
+        <CreationWizard busy={busy} onCreate={onCreate} onRollScores={() => rollAbilityScoresAction()} />
+      </div>
+    );
+  }
+
+  if (mode === "concept") {
+    return (
+      <ConceptForm
+        initial={concept}
+        busy={busy}
+        onCancel={() => setMode("choose")}
+        onSend={async (c) => {
+          const ok = await onSendConcept(c);
+          if (ok) setMode("choose");
+          return ok;
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="stack-lg">
+      {concept && (
+        <div className="cs-concept-banner">
+          <span className="cs-concept-icon" aria-hidden="true">
+            💡
+          </span>
+          <div className="stack-xs cs-concept-grow">
+            <strong>Ton concept attend ton MJ.</strong>
+            <span className="muted small">
+              {[concept.speciesName, concept.className].filter(Boolean).join(" · ") || "Espèce et classe à définir"} · « {concept.text.length > 140 ? `${concept.text.slice(0, 140)}…` : concept.text} »
+            </span>
+          </div>
+          <div className="pl-actions">
+            <button type="button" className="btn btn-ghost btn-small" onClick={() => setMode("concept")}>
+              Modifier
+            </button>
+            <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={onWithdrawConcept}>
+              Retirer
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="cs-start-grid">
+        <button type="button" className="cs-start-card" onClick={() => setMode("classic")}>
+          <span className="cs-start-icon" aria-hidden="true">
+            🛡️
+          </span>
+          <strong>Création classique</strong>
+          <span className="muted">L&apos;assistant te guide pas à pas : classe, espèce, historique, caractéristiques tirées aux dés, compétences.</span>
+          <span className="text-link">Commencer →</span>
+        </button>
+        <button type="button" className="cs-start-card" onClick={() => setMode("concept")}>
+          <span className="cs-start-icon" aria-hidden="true">
+            💡
+          </span>
+          <strong>J&apos;ai un concept</strong>
+          <span className="muted">Tu as une idée de personnage mais pas encore les règles en tête ? Décris-la : ton MJ t&apos;aidera à créer la fiche.</span>
+          <span className="text-link">{concept ? "Modifier mon concept →" : "Décrire mon concept →"}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConceptForm({
+  initial,
+  busy,
+  onCancel,
+  onSend,
+}: {
+  initial: ConceptData | null;
+  busy: boolean;
+  onCancel: () => void;
+  onSend: (c: { speciesId: string | null; classId: string | null; text: string }) => Promise<boolean>;
+}) {
+  const [speciesId, setSpeciesId] = useState(initial?.speciesId ?? "");
+  const [classId, setClassId] = useState(initial?.classId ?? "");
+  const [text, setText] = useState(initial?.text ?? "");
+  const tooShort = text.trim().length < 10;
+  return (
+    <form
+      className="cs-concept-form stack-lg"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!tooShort) void onSend({ speciesId: speciesId || null, classId: classId || null, text });
+      }}
+    >
+      <div className="stack-xs">
+        <p className="eyebrow">J&apos;ai un concept</p>
+        <h2 className="title">Raconte-nous ton personnage</h2>
+        <p className="muted">L&apos;espèce et la classe sont facultatives : laisse « Je ne sais pas encore » si tu hésites. Ton MJ lira ton message et t&apos;aidera à créer la fiche.</p>
+      </div>
+      <div className="grid-2">
+        <label className="field">
+          <span className="label">Espèce (facultatif)</span>
+          <select className="input" value={speciesId} onChange={(e) => setSpeciesId(e.target.value)}>
+            <option value="">Je ne sais pas encore</option>
+            {SPECIES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span className="label">Classe (facultatif)</span>
+          <select className="input" value={classId} onChange={(e) => setClassId(e.target.value)}>
+            <option value="">Je ne sais pas encore</option>
+            {CLASSES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label className="field">
+        <span className="label">Ton concept</span>
+        <textarea
+          className="input cs-concept-textarea"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          maxLength={3000}
+          rows={8}
+          placeholder="Qui est-il ? D'où vient-il ? Ce qu'il sait faire, ce qu'il cherche, une image qui te plaît… Par exemple : « une ancienne garde du temple qui a perdu la foi et se bat avec un bouclier fendu »."
+          required
+        />
+        <span className="muted small">{text.trim().length < 10 ? "Quelques phrases suffisent." : `${text.length} / 3000`}</span>
+      </label>
+      <div className="pl-actions">
+        <button type="submit" className="btn" disabled={busy || tooShort}>
+          {initial ? "Mettre à jour mon concept" : "Envoyer à mon MJ"}
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          Retour
+        </button>
+      </div>
+    </form>
   );
 }

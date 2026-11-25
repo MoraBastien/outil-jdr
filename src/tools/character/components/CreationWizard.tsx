@@ -29,6 +29,10 @@ import type { Ability, CharacterState, Choice, Scores, SkillId } from "../types"
 import { ChoicePicker, isComplete } from "./ChoicePicker";
 import Hint from "./Hint";
 
+/** Jets de caractéristiques faits par le serveur (6 × 4d6, le plus bas retiré). */
+export type ScoreRoll = { values: number[]; dice: number[][]; rolls: number };
+type RollState = { pool: ScoreRoll | null; assign: Partial<Record<Ability, number>>; rolling: boolean; error: string | null };
+
 const STEPS = ["Classe", "Espèce", "Historique", "Caractéristiques", "Compétences", "Identité", "Récapitulatif"];
 
 /** Ordre conseillé des caractéristiques par classe (pour la répartition automatique). */
@@ -55,6 +59,8 @@ export default function CreationWizard({
   busy,
   onCreate,
   onCancel,
+  onRollScores,
+  initial,
 }: {
   /** Nom du joueur, quand le MJ crée la fiche pour lui. */
   forName?: string;
@@ -63,15 +69,20 @@ export default function CreationWizard({
   busy: boolean;
   onCreate: (input: CreationInput) => Promise<boolean>;
   onCancel?: () => void;
+  /** Fiche de campagne : caractéristiques tirées aux dés par le serveur (seule méthode permise). */
+  onRollScores?: () => Promise<{ ok: true; values: number[]; dice: number[][]; rolls: number } | { ok: false; error: string }>;
+  /** Espèce et classe déjà choisies (par exemple depuis un concept de personnage). */
+  initial?: { classId?: string | null; speciesId?: string | null };
 }) {
+  const rollMode = !free && Boolean(onRollScores);
   const [step, setStep] = useState(0);
   const [input, setInput] = useState<CreationInput>({
     name: "",
-    classId: "",
-    speciesId: "",
+    classId: initial?.classId ?? "",
+    speciesId: initial?.speciesId ?? "",
     backgroundId: "",
     speciesOptions: {},
-    scoreMethod: "standard",
+    scoreMethod: !free && onRollScores ? "roll" : "standard",
     baseScores: blankScores(),
     backgroundBonus: {},
     answers: {},
@@ -79,6 +90,38 @@ export default function CreationWizard({
   const [identity, setIdentity] = useState({ alignment: "", personality: "", appearance: "", ideals: "", bonds: "", flaws: "", backstory: "" });
   const [notes, setNotes] = useState("");
   const set = (p: Partial<CreationInput>) => setInput((i) => ({ ...i, ...p }));
+
+  // Jets de dés (fiche de campagne) : le serveur lance, le joueur attribue chaque jet à une caractéristique.
+  const [roll, setRoll] = useState<RollState>({ pool: null, assign: {}, rolling: false, error: null });
+  const applyAssign = (pool: ScoreRoll | null, assign: Partial<Record<Ability, number>>) => {
+    const base = blankScores();
+    if (pool) for (const [a, i] of Object.entries(assign)) if (i != null) base[a as Ability] = pool.values[i];
+    setInput((cur) => ({ ...cur, scoreMethod: "roll", baseScores: base }));
+  };
+  const rollScores = async () => {
+    if (!onRollScores) return;
+    setRoll((r) => ({ ...r, rolling: true, error: null }));
+    try {
+      const r = await onRollScores();
+      if (!r.ok) return setRoll((x) => ({ ...x, rolling: false, error: r.error }));
+      setRoll({ pool: { values: r.values, dice: r.dice, rolls: r.rolls }, assign: {}, rolling: false, error: null });
+      applyAssign(r, {});
+    } catch {
+      setRoll((x) => ({ ...x, rolling: false, error: "Le lancer a échoué. Réessaie." }));
+    }
+  };
+  const assignRoll = (a: Ability, index: number | null) => {
+    setRoll((r) => {
+      const assign = { ...r.assign };
+      if (index == null) delete assign[a];
+      else {
+        for (const k of Object.keys(assign) as Ability[]) if (assign[k] === index) delete assign[k];
+        assign[a] = index;
+      }
+      applyAssign(r.pool, assign);
+      return { ...r, assign };
+    });
+  };
   const answer = (key: string, v: string[]) => setInput((i) => ({ ...i, answers: { ...i.answers, [key]: v } }));
 
   const cls = getClass(input.classId);
@@ -114,7 +157,9 @@ export default function CreationWizard({
     return list;
   }, [cls, species, bg, bgFeat, humanFeat]);
 
-  const scoresError = Object.values(input.baseScores).some((v) => !v)
+  const scoresError = rollMode && !roll.pool
+    ? "Lance les dés."
+    : Object.values(input.baseScores).some((v) => !v)
     ? "Attribue toutes les valeurs."
     : validateScores(input.scoreMethod, input.baseScores, { allowFree: free });
   const bonusError = bg ? validateBackgroundBonus(bg.abilities, input.backgroundBonus) : "Choisis un historique.";
@@ -376,7 +421,16 @@ export default function CreationWizard({
         )}
 
         {/* 4. Caractéristiques */}
-        {step === 3 && cls && bg && <ScoresStep input={input} set={set} cls={cls.id} error={scoresError ?? bonusError} free={free} />}
+        {step === 3 && cls && bg && (
+          <ScoresStep
+            input={input}
+            set={set}
+            cls={cls.id}
+            error={scoresError ?? bonusError}
+            free={free}
+            roll={rollMode ? { ...roll, onRoll: rollScores, onAssign: assignRoll, onAuto: (assign) => (setRoll((r) => ({ ...r, assign })), applyAssign(roll.pool, assign)) } : undefined}
+          />
+        )}
 
         {/* 5. Compétences et capacités */}
         {step === 4 && (
@@ -483,12 +537,15 @@ function ScoresStep({
   cls,
   error,
   free,
+  roll,
 }: {
   input: CreationInput;
   set: (p: Partial<CreationInput>) => void;
   cls: string;
   error: string | null;
   free: boolean;
+  /** Fiche de campagne : jets de dés du serveur (seule méthode). */
+  roll?: RollState & { onRoll: () => void; onAssign: (a: Ability, index: number | null) => void; onAuto: (assign: Partial<Record<Ability, number>>) => void };
 }) {
   const bg = getBackground(input.backgroundId)!;
   const c = getClass(cls)!;
@@ -498,10 +555,19 @@ function ScoresStep({
 
   const auto = () => {
     const order = PRIORITY[cls];
+    const [first, second] = order.filter((a) => bg.abilities.includes(a));
+    if (roll) {
+      // Les meilleurs jets sur les caractéristiques prioritaires de la classe.
+      if (!roll.pool) return;
+      const assign: Partial<Record<Ability, number>> = {};
+      order.forEach((a, i) => (assign[a] = i));
+      roll.onAuto(assign);
+      set({ backgroundBonus: { [first]: 2, [second]: 1 } });
+      return;
+    }
     const base = blankScores();
     order.forEach((a, i) => (base[a] = STANDARD_ARRAY[i]));
     // Bonus : +2 sur la meilleure caractéristique de l'historique, +1 sur la suivante.
-    const [first, second] = order.filter((a) => bg.abilities.includes(a));
     set({ scoreMethod: "standard", baseScores: base, backgroundBonus: { [first]: 2, [second]: 1 } });
   };
 
@@ -512,7 +578,44 @@ function ScoresStep({
         valeurs. <Hint>Le modificateur (+2, −1…) est ce que tu ajoutes à tes dés. Il vaut (valeur − 10) ÷ 2 arrondi en dessous.</Hint>
       </p>
 
+      {roll && (
+        <div className="cs-roll">
+          <div className="cs-row-between">
+            <p className="small" style={{ margin: 0 }}>
+              <b>4d6, le plus bas retiré, six fois.</b> Les dés sont lancés par le serveur ; attribue ensuite chaque résultat à une caractéristique.{" "}
+              <Hint>Tu peux relancer, mais chaque relance est comptée et ton MJ la voit sur ta fiche.</Hint>
+            </p>
+            <button type="button" className="btn" onClick={roll.onRoll} disabled={roll.rolling}>
+              {roll.rolling ? "Lancer…" : roll.pool ? "🎲 Relancer les dés" : "🎲 Lancer les dés"}
+            </button>
+          </div>
+          {roll.error && <p className="flash flash-error small">{roll.error}</p>}
+          {roll.pool && (
+            <>
+              <ul className="cs-roll-pool" aria-label="Résultats des jets">
+                {roll.pool.values.map((v, i) => {
+                  const usedBy = (Object.keys(roll.assign) as Ability[]).find((a) => roll.assign[a] === i);
+                  return (
+                    <li key={i} className={`cs-roll-die${usedBy ? " used" : ""}`} style={{ animationDelay: `${i * 70}ms` }}>
+                      <strong>{v}</strong>
+                      <span className="cs-roll-detail" aria-label={`Dés : ${roll.pool!.dice[i].join(", ")}, le ${roll.pool!.dice[i][3]} est retiré`}>
+                        {roll.pool!.dice[i].slice(0, 3).join(" · ")} · <s>{roll.pool!.dice[i][3]}</s>
+                      </span>
+                      <span className="cs-roll-used">{usedBy ? abilityShort(usedBy) : " "}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="muted small" style={{ margin: 0 }}>
+                {roll.pool.rolls > 1 ? `Relances : ${roll.pool.rolls - 1} (visibles par ton MJ).` : "Premier lancer."}
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="cs-row-between">
+        {!roll && (
         <div className="segmented-tabs" role="tablist">
           {(free ? (["standard", "pointbuy", "free"] as const) : (["standard", "pointbuy"] as const)).map((m) => (
             <button
@@ -532,7 +635,8 @@ function ScoresStep({
             </button>
           ))}
         </div>
-        <button type="button" className="btn btn-ghost btn-small" onClick={auto}>
+        )}
+        <button type="button" className="btn btn-ghost btn-small" onClick={auto} disabled={Boolean(roll && !roll.pool)}>
           ✨ Répartition conseillée
         </button>
       </div>
@@ -559,7 +663,26 @@ function ScoresStep({
               <span className="label">
                 {a.name} {isPrimary && <span className="chip chip-accent">principale</span>}
               </span>
-              {input.scoreMethod === "free" ? (
+              {roll ? (
+                <select
+                  className="input"
+                  value={roll.assign[a.id] ?? ""}
+                  disabled={!roll.pool}
+                  onChange={(e) => roll.onAssign(a.id, e.target.value === "" ? null : Number(e.target.value))}
+                  aria-label={a.name}
+                >
+                  <option value="">—</option>
+                  {(roll.pool?.values ?? []).map((v, i) => {
+                    const takenBy = (Object.keys(roll.assign) as Ability[]).find((k) => roll.assign[k] === i && k !== a.id);
+                    return (
+                      <option key={i} value={i} disabled={Boolean(takenBy)}>
+                        {v}
+                        {takenBy ? ` (${abilityShort(takenBy)})` : ""}
+                      </option>
+                    );
+                  })}
+                </select>
+              ) : input.scoreMethod === "free" ? (
                 <input
                   type="number"
                   className="input cs-num"

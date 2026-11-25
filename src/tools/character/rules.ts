@@ -376,7 +376,7 @@ export type CreationInput = {
   speciesId: string;
   backgroundId: string;
   speciesOptions: Record<string, string>;
-  scoreMethod: "standard" | "pointbuy" | "free";
+  scoreMethod: "roll" | "standard" | "pointbuy" | "free";
   baseScores: Scores;
   backgroundBonus: Partial<Scores>;
   answers: Answers;
@@ -413,6 +413,11 @@ export function validateScores(method: CreationInput["scoreMethod"], base: Score
   if (method === "free") {
     if (!opts.allowFree) return "Les valeurs libres ne sont permises que dans le coffre.";
     if (values.some((v) => v < FREE_MIN || v > FREE_MAX)) return `Avec les valeurs libres, chaque caractéristique va de ${FREE_MIN} à ${FREE_MAX}.`;
+    return null;
+  }
+  if (method === "roll") {
+    // Les valeurs viennent d'un jet du serveur (vérifié par l'action de création) : 3 à 18.
+    if (values.some((v) => v < 3 || v > 18)) return "Chaque jet de 4d6 donne une valeur de 3 à 18.";
     return null;
   }
   if (method === "standard") {

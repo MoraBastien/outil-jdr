@@ -8,13 +8,25 @@ import { useEffect, useRef, useState } from "react";
 import { Command } from "cmdk";
 import { logout } from "@/app/actions";
 
-export type NavItem = { href: string; label: string; short: string; icon: string; hint?: string };
+export type NavItem = { href: string; label: string; short: string; icon: string; hint?: string; glyph?: string };
+
+/** Icône d'un lien : tracé SVG au trait (`glyph`) ou, à défaut, le caractère `icon` (glyphes des Entités). */
+function ItemIcon({ item }: { item: Pick<NavItem, "icon" | "glyph"> }) {
+  if (!item.glyph) return <>{item.icon}</>;
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={item.glyph} />
+    </svg>
+  );
+}
 export type NavGroup = { label: string | null; items: NavItem[] };
 type Props = {
   groups: NavGroup[];
   primary: NavItem[];
   players: { href: string; label: string }[];
   user: { name: string; role: string };
+  /** Icône au trait du bouton « Menu » (absente pour les Entités, qui gardent ☰). */
+  menuGlyph?: string;
 };
 
 const useActive = () => {
@@ -35,7 +47,7 @@ function NavLinks({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () 
               <Link key={it.href} href={it.href} className={`sb-link${active ? " active" : ""}`} aria-current={active ? "page" : undefined} onClick={onNavigate}>
                 {active && <span className="nav-pill" aria-hidden="true" />}
                 <span className="sb-icon" aria-hidden="true">
-                  {it.icon}
+                  <ItemIcon item={it} />
                 </span>
                 <span className="sb-label">{it.label}</span>
               </Link>
@@ -78,11 +90,11 @@ const Brand = () => (
     <span className="brand-mark" aria-hidden="true">
       ✦
     </span>
-    <span className="brand-name">Outils de la table</span>
+    <span className="brand-name">Le Navire</span>
   </Link>
 );
 
-export default function AppNav({ groups, primary, players, user }: Props) {
+export default function AppNav({ groups, primary, players, user, menuGlyph }: Props) {
   const isActive = useActive();
   const pathname = usePathname();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -142,7 +154,7 @@ export default function AppNav({ groups, primary, players, user }: Props) {
             <Link key={it.href} href={it.href} className={`tab${active ? " active" : ""}`} aria-current={active ? "page" : undefined}>
               {active && <span className="tab-pill" aria-hidden="true" />}
               <span className="tab-icon" aria-hidden="true">
-                {it.icon}
+                <ItemIcon item={it} />
               </span>
               <span className="tab-label">{it.short}</span>
             </Link>
@@ -151,7 +163,7 @@ export default function AppNav({ groups, primary, players, user }: Props) {
         <button type="button" className={`tab${menuActive ? " active" : ""}`} onClick={openDrawer} aria-haspopup="dialog">
           {menuActive && <span className="tab-pill" aria-hidden="true" />}
           <span className="tab-icon" aria-hidden="true">
-            ☰
+            <ItemIcon item={{ icon: "☰", glyph: menuGlyph }} />
           </span>
           <span className="tab-label">Menu</span>
         </button>
@@ -213,7 +225,7 @@ function Palette({
             {g.items.map((it) => (
               <Command.Item key={it.href} value={it.label} keywords={[it.short]} onSelect={() => go(it.href)} className="palette-item">
                 <span className="sb-icon" aria-hidden="true">
-                  {it.icon}
+                  <ItemIcon item={it} />
                 </span>
                 <span className="stack-xs">
                   <span>{it.label}</span>

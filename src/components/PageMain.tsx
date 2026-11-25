@@ -6,7 +6,9 @@ export default function PageMain({ className, children }: { className: string; c
   return (
     // update="none" : pas d'animation quand la page se rafraîchit après une action serveur.
     <ViewTransition enter="page" exit="page" update="none" default="none">
-      <main className={className}>{children}</main>
+      <main id="contenu" tabIndex={-1} className={className}>
+        {children}
+      </main>
     </ViewTransition>
   );
 }

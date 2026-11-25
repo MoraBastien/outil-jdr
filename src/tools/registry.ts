@@ -29,6 +29,12 @@ import { TOOL_META as HOMUNCULUS_META } from "./homunculus-creator/meta";
 import Grimoire from "./grimoire/Grimoire";
 import { GRIMOIRE_TOOL_ID } from "./grimoire/meta";
 import AideMemoire, { AIDE_MEMOIRE_TOOL_ID } from "./aide-memoire/AideMemoire";
+import MapTool from "./carte/MapTool";
+import { CARTE_TOOL_ID } from "./carte/meta";
+import Market from "./marche/Market";
+import { MARCHE_TOOL_ID } from "./marche/meta";
+import CrewTool from "./equipage/CrewTool";
+import { EQUIPAGE_TOOL_ID } from "./equipage/meta";
 
 /** Infos du joueur transmises à chaque outil (jamais son code). */
 export type ToolPlayer = {
@@ -86,9 +92,10 @@ export type ToolDefinition = {
 
 /** Rubriques de la navigation, dans l'ordre d'affichage. */
 export const NAV_SECTIONS = [
-  { id: "campagne", label: "Campagne" },
+  { id: "histoire", label: "L'histoire" },
+  { id: "personnage", label: "Mon personnage" },
+  { id: "escale", label: "L'escale" },
   { id: "creation", label: "Création" },
-  { id: "outils", label: "Outils" },
 ] as const;
 export type NavSection = (typeof NAV_SECTIONS)[number]["id"];
 
@@ -99,7 +106,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Lance des dés (d4, d6, d20…) ou une formule comme 2d6+3.",
     icon: "🎲",
     component: DiceRoller,
-    section: "outils",
+    section: "escale",
     short: "Dés",
     widget: { component: DiceWidget, title: "Jet rapide", order: 30 },
   },
@@ -116,11 +123,11 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     id: PLANNING_TOOL_ID, // "planning"
-    name: "Planning des sessions",
-    description: "Le MJ propose des dates à chaque groupe, chacun indique ses disponibilités.",
+    name: "Planning des séances",
+    description: "Le MJ propose des dates de séance à chaque groupe, chacun indique ses disponibilités.",
     icon: "📅",
     component: Planning,
-    section: "campagne",
+    section: "histoire",
     short: "Planning",
     widget: { component: PlanningWidget, title: "Prochaines sessions", wide: true, order: 10 },
   },
@@ -130,7 +137,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Ta fiche D&D (règles 2024) : création guidée, explications et montée de niveau pas à pas.",
     icon: "🛡️",
     component: CharacterHost,
-    section: "campagne",
+    section: "personnage",
     short: "Fiche",
     wide: true,
     widget: { component: CharacterWidget, title: "Mes personnages", adminTitle: "Personnages de la table", wide: true, order: 5 },
@@ -153,7 +160,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "La frise des séances : résumés et moments marquants de ta campagne.",
     icon: "📖",
     component: Chronicle,
-    section: "campagne",
+    section: "histoire",
     short: "Chronique",
     widget: { component: ChronicleWidget, title: "Dernière séance", order: 15 },
   },
@@ -163,7 +170,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Le journal de quêtes du groupe : en cours, pistes et quêtes terminées.",
     icon: "📜",
     component: QuestsTool,
-    section: "campagne",
+    section: "histoire",
     short: "Quêtes",
     widget: { component: QuestsWidget, title: "Quêtes en cours", order: 16 },
   },
@@ -173,7 +180,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Les héros tombés de ta campagne, et leur épitaphe.",
     icon: "🪦",
     component: Cemetery,
-    section: "campagne",
+    section: "personnage",
     short: "Cimetière",
     widget: { component: CemeteryWidget, title: "Cimetière", order: 40 },
   },
@@ -183,7 +190,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Les sorts de niveau 0 à 2 : recherche, détail, et le choix des sorts de ton personnage.",
     icon: "📕",
     component: Grimoire,
-    section: "outils",
+    section: "personnage",
     short: "Grimoire",
     wide: true,
   },
@@ -193,8 +200,38 @@ export const TOOLS: ToolDefinition[] = [
     description: "Les règles essentielles sur une page : ton tour, les actions, les jets, la mort et les états.",
     icon: "🧭",
     component: AideMemoire,
-    section: "outils",
+    section: "personnage",
     short: "Règles",
+    wide: true,
+  },
+  {
+    id: CARTE_TOOL_ID, // "carte"
+    name: "La Carte",
+    description: "L'archipel : les îles visitées, la route du Navire, l'escale actuelle et la prochaine.",
+    icon: "🗺️",
+    component: MapTool,
+    section: "histoire",
+    short: "Carte",
+    wide: true,
+  },
+  {
+    id: MARCHE_TOOL_ID, // "marche"
+    name: "Le Marché",
+    description: "Les échoppes de l'île où mouille le Navire : achète avec les pièces de ta fiche.",
+    icon: "⚖️",
+    component: Market,
+    section: "escale",
+    short: "Marché",
+    wide: true,
+  },
+  {
+    id: EQUIPAGE_TOOL_ID, // "equipage"
+    name: "L'Équipage",
+    description: "Les marins du Navire : qui tient la barre, qui fait la cuisine, qui grimpe à la vigie.",
+    icon: "⚓",
+    component: CrewTool,
+    section: "escale",
+    short: "Équipage",
     wide: true,
   },
   // { id: "mon-outil", name: "Mon outil", description: "…", icon: "🗺️", component: MonOutil, widget: { component: MonWidget } },

@@ -1,7 +1,7 @@
 // Widget du tableau de bord : les personnages du joueur (un par groupe) et le bouton « Monter de niveau ».
 // MJ : les fiches de chaque groupe et les montées de niveau en attente.
 import Link from "next/link";
-import { getCharacters, getGroups, getProposals, getUsers, type StoredCharacter, type User } from "@/lib/db";
+import { getCharacters, getConcepts, getGroups, getProposals, getUsers, type StoredCharacter, type User } from "@/lib/db";
 import { membersOf, visibleGroups } from "@/lib/groups";
 import { derive, fmtMod, shortLabel } from "./rules";
 import { entitySheetOf, type EntitySheetData } from "@/tools/homunculus/entity";
@@ -11,7 +11,8 @@ import { CHARACTER_TOOL_ID, MAX_LEVEL, type CharacterState } from "./types";
 const HREF = `/outils/${CHARACTER_TOOL_ID}`;
 
 export default async function CharacterWidget({ user }: { user: User }) {
-  const [chars, users, allGroups, proposals] = await Promise.all([getCharacters(), getUsers(), getGroups(), getProposals()]);
+  const [chars, users, allGroups, proposals, concepts] = await Promise.all([getCharacters(), getUsers(), getGroups(), getProposals(), getConcepts()]);
+  const hasConcept = (ownerId: string, groupId: string) => concepts.some((x) => x.ownerId === ownerId && x.groupId === groupId && x.status === "pending");
   const groups = visibleGroups(user, allGroups);
 
   if (user.role === "admin") {
@@ -55,11 +56,13 @@ export default async function CharacterWidget({ user }: { user: User }) {
                           <span className="stack-xs">
                             <strong>{s?.name ?? p.name}</strong>
                             <span className="muted small">
-                              {s ? `${p.name} · ${shortLabel(s)}` : proposal ? `Propose ${(proposal.state as CharacterState).name}` : "Pas encore de fiche"}
+                              {s ? `${p.name} · ${shortLabel(s)}` : proposal ? `Propose ${(proposal.state as CharacterState).name}` : hasConcept(p.id, g.id) ? `${p.name} · a envoyé un concept` : "Pas encore de fiche"}
                             </span>
                           </span>
                           {proposal ? (
                             <span className="chip chip-accent">🗝️ À examiner</span>
+                          ) : !c && hasConcept(p.id, g.id) ? (
+                            <span className="chip chip-accent">💡 Concept à lire</span>
                           ) : c && s && c.grantedLevel > s.level ? (
                             <span className="chip chip-accent">Montée en attente</span>
                           ) : (
@@ -116,6 +119,13 @@ export default async function CharacterWidget({ user }: { user: User }) {
               <CharacterLine c={c} groupId={g.id} />
             ) : proposals.some((x) => x.ownerId === user.id && x.groupId === g.id && x.status === "pending") ? (
               <p className="muted small">🗝️ Ton personnage proposé depuis le coffre attend la réponse de ton MJ.</p>
+            ) : hasConcept(user.id, g.id) ? (
+              <p className="muted small">
+                💡 Ton concept de personnage attend la réponse de ton MJ.{" "}
+                <Link href={`${HREF}?groupe=${g.id}`} className="text-link">
+                  Le relire
+                </Link>
+              </p>
             ) : (
               <div className="cs-widget-empty">
                 <p className="muted">

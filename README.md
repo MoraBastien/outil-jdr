@@ -216,6 +216,21 @@ Le site peut être ajouté à l'écran d'accueil comme une application (`src/app
   capacité, renseigner `choice` (`options`, `skills`, `expertise`, `subclass` ou `asi`) : création, montée de niveau et
   validation le prennent en compte automatiquement.
 
+### Création d'un personnage de campagne
+
+- **Deux portes d'entrée** pour un joueur sans personnage dans un groupe : « Création classique » (l'assistant) ou
+  « J'ai un concept ».
+- **Caractéristiques : uniquement les jets de dés** (4d6, le plus bas retiré, six fois). `rollAbilityScoresAction`
+  lance les dés côté serveur et les note dans `diceLog` (`tool: "personnage"`, `kind: "abilities"`) ; à la création,
+  `createCharacterAction` refuse des valeurs qui ne correspondent à aucun jet du créateur depuis la dernière fiche du
+  joueur. Les relances sont permises mais comptées (`state.scoreRolls`) et affichées au MJ dans la liste du groupe. Le
+  coffre garde ses méthodes libres (tableau standard, achat de points, valeurs libres) ; une proposition venue du
+  coffre reste acceptée telle quelle par le MJ.
+- **« J'ai un concept »** : espèce et classe facultatives, et un texte libre (`concepts` dans db.json). Le MJ voit
+  « 💡 Concept à lire » sur le tableau de bord et dans la liste du groupe ; « Lire le concept » affiche le message, avec
+  « Créer la fiche pour <joueur> » (l'assistant s'ouvre avec l'espèce et la classe proposées) ou « Marquer comme
+  traité ». Le concept est traité automatiquement dès que la fiche du joueur existe dans ce groupe.
+
 ## Coffre (`src/tools/vault/`)
 
 - Ouvert à tous les joueurs (pas de case à cocher). Chacun y garde jusqu'à 30 essais de personnages (`vault` dans
@@ -283,6 +298,29 @@ Deux outils ouverts à tous (comme le coffre), pour que les règles restent acce
   dans ce groupe.
 - Chaque tombe (`graves` dans db.json) garde nom, espèce/classe/niveau, date et épitaphe. Le MJ modifie l'épitaphe en
   cliquant dessus, ou ramène le personnage à la vie (si le joueur n'a pas déjà un autre personnage dans ce groupe).
+
+## Le Navire : tableau de bord, carte et marché
+
+Les one-shots se jouent dans un archipel : le groupe voyage en navire d'île en île. Le site s'organise autour de
+trois questions (menu « L'histoire », « Mon personnage », « L'escale »).
+
+- **Tableau de bord du joueur** (`src/components/dashboard/`, données : `src/lib/dashboard.ts`) : chiffres clés
+  (prochaine séance, présence, bourse, quêtes), « Où en est l'histoire » (dernière séance publiée et route des
+  escales), « Avant de lever l'ancre » (liste calculée : niveau accordé, sorts à préparer, achats au port, présence),
+  ma fiche, le port, l'activité à bord, l'équipage et les prochaines traversées (« Je serai à bord » sur une séance
+  confirmée : `setPresenceAction`). Le MJ et les Entités gardent le tableau de bord par widgets ; le MJ y voit aussi
+  l'activité de ses groupes.
+- **Carte** (`src/tools/carte/`, outil de groupe) : le MJ place les îles (`islands`), les colore, les cache ou les
+  montre, indique où mouille le Navire (`Group.harborIslandId`) et la prochaine escale (`Group.nextIslandId`). Une
+  séance de la chronique peut être rattachée à son île (`ChronicleSession.islandId`) : la suite des séances trace la
+  route. La couleur de l'île où mouille le Navire teinte tout le site (variable `--isle` posée sur `<html>`).
+- **Marché** (`src/tools/marche/`, outil de groupe) : les échoppes (`shops`) de l'île où mouille le Navire. Achat
+  immédiat, payé avec les pièces de la fiche (la monnaie est rendue), l'objet s'ajoute à l'équipement (`purchases`).
+  Le MJ remplit les échoppes et peut annuler un achat (remboursement, stock rendu, ligne retirée de l'équipement).
+- **Activité à bord** (`src/lib/activity.ts`, `activity` dans db.json) : achats, présences, journaux publiés, quêtes,
+  montées de niveau, arrivées, morts, mouvements du Navire. 200 lignes gardées par groupe. Rien sur l'Atelier de Rigel.
+- **Thème** : nuit marine, police Geist, fond animé (lueur des profondeurs, bulles). Le thème « Astre déchu » des
+  Entités garde ses polices et son ciel.
 
 ## Administration
 

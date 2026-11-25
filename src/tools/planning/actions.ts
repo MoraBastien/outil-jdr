@@ -5,6 +5,7 @@ import { requireUser, canUseTool } from "@/lib/auth";
 import { getUsers, getPolls, getGroups, updateDb, randomUUID, type Db, type Poll, type PollSlot, type User } from "@/lib/db";
 import { membersOf, userGroupIds, visibleGroups } from "@/lib/groups";
 import { tableToday } from "./summary";
+import { crewName, logActivity } from "@/lib/activity";
 import { PLANNING_TOOL_ID, type PlanningData, type PlanningResult, type PollAnswer, type SlotInput } from "./types";
 
 const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -237,7 +238,33 @@ export async function answerAction(pollId: string, slotId: string, answer: PollA
     // Réponse donnée à la main : elle ne suit plus les disponibilités habituelles.
     const auto = poll.autoFilled?.[user.id];
     if (auto) poll.autoFilled![user.id] = auto.filter((id) => id !== slotId);
+    if (answer)
+      logActivity(db, { groupId: poll.groupId, actorId: user.id, kind: "presence", text: `${crewName(db, poll.groupId, user.id)} a donné ses disponibilités pour « ${poll.title} ».`, href: "/outils/planning", key: `presence:${poll.id}:${user.id}` });
     return null;
   });
   return error ? { ok: false, error } : { ok: true, data: await view(user) };
+}
+
+/**
+ * Séance confirmée : le joueur dit s'il sera à bord (oui / non) sur le créneau retenu.
+ * Sert au bouton « Je serai à bord » du tableau de bord.
+ */
+export async function setPresenceAction(pollId: string, answer: PollAnswer): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireToolUser();
+  if (user.role !== "player") return { ok: false, error: "Seuls les joueurs indiquent leur présence." };
+  if (!ANSWERS.includes(answer)) return { ok: false, error: "Réponse invalide." };
+  const error = await updateDb((db) => {
+    const poll = findPoll(db, pollId);
+    if (!poll) return "Séance introuvable.";
+    if (!poll.groupId || !userGroupIds(user).includes(poll.groupId)) return "Cette séance concerne un groupe dont tu ne fais pas partie.";
+    if (poll.status !== "confirmed" || !poll.confirmedSlotId) return "Cette séance n'est pas encore fixée.";
+    const slot = poll.slots.find((s) => s.id === poll.confirmedSlotId);
+    if (!slot) return "Créneau introuvable.";
+    (poll.responses[user.id] ??= {})[slot.id] = answer;
+    const day = new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${slot.date}T12:00:00Z`));
+    const who = crewName(db, poll.groupId, user.id);
+    logActivity(db, { groupId: poll.groupId, actorId: user.id, kind: "presence", text: answer === "yes" ? `${who} sera à bord ${day}.` : answer === "maybe" ? `${who} viendra peut-être ${day}.` : `${who} ne pourra pas venir ${day}.`, href: "/outils/planning", key: `presence:${poll.id}:${user.id}` });
+    return null;
+  });
+  return error ? { ok: false, error } : { ok: true };
 }

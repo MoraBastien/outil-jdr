@@ -5,9 +5,11 @@
 
 import { randomInt } from "crypto";
 import { requireUser, canUseTool } from "@/lib/auth";
-import { getCharacters, getGraves, getGroups, getProposals, getUsers, randomUUID, updateDb, type Db, type Grave, type StoredCharacter, type User } from "@/lib/db";
+import { getCharacters, getConcepts, getGraves, getGroups, getProposals, getUsers, randomUUID, updateDb, type CharacterConcept, type Db, type Grave, type StoredCharacter, type User } from "@/lib/db";
 import { membersOf, userGroupIds, visibleGroups } from "@/lib/groups";
+import { logActivity } from "@/lib/activity";
 import { getClass } from "./data/classes";
+import { getSpecies } from "./data/origins";
 import { foundryChecklist } from "./foundry";
 import { RuleError, applyLevelUp, averageHp, buildCharacter, sanitizeFree, shortLabel, type CreationInput } from "./rules";
 import { entitySheetOf, isEntityPlayer } from "@/tools/homunculus/entity";
@@ -26,6 +28,10 @@ export type PendingProposal = { id: string; state: CharacterState; message: stri
  */
 export type OtherSheet = { title: string; sub: string; chip: string };
 export type LevelUpOutcome = { hpDie: number; rolled: boolean; summary: string[]; foundry: string[] };
+/** Concept de personnage en attente (« J'ai un concept »). */
+export type ConceptData = { id: string; speciesId: string | null; classId: string | null; speciesName: string | null; className: string | null; text: string; createdAt: string; updatedAt: string };
+/** Jet des caractéristiques : 6 × 4d6 (le plus bas retiré), totaux triés et dés de chaque jet. */
+export type AbilityRoll = { ok: true; values: number[]; dice: number[][]; rolls: number } | { ok: false; error: string };
 
 export type CharacterView = {
   isAdmin: boolean;
@@ -36,9 +42,10 @@ export type CharacterView = {
     record: CharacterRecord | null;
     fallen: { name: string; epitaph: string; diedAt: string }[];
     proposal: MyProposal | null;
+    concept: ConceptData | null;
   }[];
   /** MJ : chaque groupe, ses membres et leur fiche dans ce groupe (ou leur proposition en attente). */
-  groups: { id: string; name: string; members: { id: string; name: string; entry: AdminEntry | null; proposal: PendingProposal | null; other: OtherSheet | null }[] }[];
+  groups: { id: string; name: string; members: { id: string; name: string; entry: AdminEntry | null; proposal: PendingProposal | null; other: OtherSheet | null; concept: ConceptData | null }[] }[];
   /** MJ : fiches hors groupe (groupe supprimé, joueur retiré du groupe, anciennes fiches). */
   archived: (AdminEntry & { groupName: string | null })[];
 };
@@ -75,8 +82,27 @@ const toEntry = (c: StoredCharacter, users: User[], graves: Grave[]): AdminEntry
   };
 };
 
+const toConcept = (c: CharacterConcept | undefined): ConceptData | null =>
+  c
+    ? {
+        id: c.id,
+        speciesId: c.speciesId,
+        classId: c.classId,
+        speciesName: c.speciesId ? getSpecies(c.speciesId)?.name ?? null : null,
+        className: c.classId ? getClass(c.classId)?.name ?? null : null,
+        text: c.text,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+      }
+    : null;
+
+/** Début de la fenêtre des jets de caractéristiques : la dernière fiche créée pour ce joueur (les jets d'avant ne comptent plus). */
+const rollWindow = (db: Pick<Db, "characters">, ownerId: string) =>
+  (db.characters ?? []).filter((c) => c.ownerId === ownerId).reduce((max, c) => (c.createdAt > max ? c.createdAt : max), "");
+
 async function view(user: User): Promise<CharacterView> {
-  const [chars, users, allGroups, graves, proposals] = await Promise.all([getCharacters(), getUsers(), getGroups(), getGraves(), getProposals()]);
+  const [chars, users, allGroups, graves, proposals, concepts] = await Promise.all([getCharacters(), getUsers(), getGroups(), getGraves(), getProposals(), getConcepts()]);
+  const conceptOf = (ownerId: string, groupId: string) => toConcept(concepts.find((x) => x.ownerId === ownerId && x.groupId === groupId && x.status === "pending"));
   const isAdmin = user.role === "admin";
   const groups = visibleGroups(user, allGroups);
   // La fiche « en jeu » d'un joueur dans un groupe : la seule qui n'est pas morte.
@@ -95,7 +121,7 @@ async function view(user: User): Promise<CharacterView> {
         const proposal: MyProposal | null = p
           ? { name: (p.state as CharacterState).name, label: shortLabel(p.state as CharacterState), status: p.status, reason: p.reason ?? "" }
           : null;
-        return { group: { id: g.id, name: g.name }, record: c ? toRecord(c, users) : null, fallen, proposal };
+        return { group: { id: g.id, name: g.name }, record: c ? toRecord(c, users) : null, fallen, proposal, concept: c ? null : conceptOf(user.id, g.id) };
       }),
       groups: [],
       archived: [],
@@ -123,7 +149,7 @@ async function view(user: User): Promise<CharacterView> {
             chip: `✨ ${entity.name || "Entité"} · Écho ${entity.echo}`,
           }
         : null;
-      return { id: m.id, name: m.name, entry: c ? toEntry(c, users, graves) : null, proposal, other };
+      return { id: m.id, name: m.name, entry: c ? toEntry(c, users, graves) : null, proposal, other, concept: c || other ? null : conceptOf(m.id, g.id) };
     }),
   }));
   const groupName = new Map(allGroups.map((g) => [g.id, g.name]));
@@ -169,8 +195,16 @@ export async function createCharacterAction(input: CreationInput, groupId: strin
   const user = await requireToolUser();
   return guard(user, async () => {
     const owner = ownerId && user.role === "admin" ? ownerId : user.id;
+    // Fiche de campagne : caractéristiques tirées aux dés (4d6), par le serveur.
+    if (input?.scoreMethod !== "roll") throw new RuleError("Lance les dés pour tes caractéristiques.");
     const state = buildCharacter(input);
     await updateDb((db) => {
+      // Les valeurs doivent venir d'un jet noté au journal, fait par celui qui crée la fiche, depuis la dernière fiche du joueur.
+      const since = rollWindow(db, owner);
+      const rolls = (db.diceLog ?? []).filter((d) => d.userId === user.id && d.tool === CHARACTER_TOOL_ID && d.kind === "abilities" && d.createdAt > since);
+      const key = [...Object.values(state.baseScores)].sort((a, b) => b - a).join(",");
+      if (!rolls.some((d) => d.values.join(",") === key)) throw new RuleError("Ces caractéristiques ne correspondent à aucun jet enregistré. Relance les dés.");
+      state.scoreRolls = rolls.length;
       if (!(db.groups ?? []).some((g) => g.id === groupId)) throw new RuleError("Groupe introuvable.");
       const target = db.users.find((u) => u.id === owner && u.role === "player");
       if (target && isEntityPlayer(target)) throw new RuleError("Ce joueur incarne une entité : sa fiche n'est pas une fiche D&D.");
@@ -178,9 +212,83 @@ export async function createCharacterAction(input: CreationInput, groupId: strin
       const list = (db.characters ??= []);
       if (list.some((c) => c.ownerId === owner && c.groupId === groupId && !c.deadAt)) throw new RuleError("Ce joueur a déjà une fiche dans ce groupe.");
       const now = new Date().toISOString();
-      list.push({ id: randomUUID(), ownerId: owner, groupId, state, grantedLevel: 1, snapshots: [{ level: 1, at: now, state }], createdAt: now, updatedAt: now });
-      // Une proposition venue du coffre pour ce groupe n'a plus lieu d'être.
+      const id = randomUUID();
+      list.push({ id, ownerId: owner, groupId, state, grantedLevel: 1, snapshots: [{ level: 1, at: now, state }], createdAt: now, updatedAt: now });
+      logActivity(db, { groupId, actorId: owner, kind: "character", text: `${state.name} rejoint l'équipage (${shortLabel(state)}).`, href: "/outils/personnage", key: `character:${id}` });
+      // Une proposition venue du coffre pour ce groupe n'a plus lieu d'être, et le concept est traité.
       db.proposals = (db.proposals ?? []).filter((p) => !(p.ownerId === owner && p.groupId === groupId));
+      closeConcept(db, owner, groupId, now);
+    });
+  });
+}
+
+function closeConcept(db: Db, ownerId: string, groupId: string, now: string) {
+  for (const c of db.concepts ?? []) if (c.ownerId === ownerId && c.groupId === groupId && c.status === "pending") Object.assign(c, { status: "done", updatedAt: now });
+}
+
+/* ---------- Caractéristiques : jets de dés ---------- */
+
+/** 6 × 4d6, le plus bas retiré, lancés ici et notés au journal (relances comptées, visibles par le MJ). */
+export async function rollAbilityScoresAction(): Promise<AbilityRoll> {
+  const user = await requireToolUser();
+  const dice = Array.from({ length: 6 }, () => Array.from({ length: 4 }, () => randomInt(1, 7)).sort((a, b) => b - a));
+  const totals = dice.map((d) => d[0] + d[1] + d[2]);
+  const order = totals.map((t, i) => [t, i] as const).sort((a, b) => b[0] - a[0]);
+  const values = order.map(([t]) => t);
+  let rolls = 0;
+  await updateDb((db) => {
+    const now = new Date().toISOString();
+    (db.diceLog ??= []).push({ userId: user.id, tool: CHARACTER_TOOL_ID, kind: "abilities", values, createdAt: now });
+    const since = rollWindow(db, user.id);
+    rolls = db.diceLog.filter((d) => d.userId === user.id && d.tool === CHARACTER_TOOL_ID && d.kind === "abilities" && d.createdAt > since).length;
+  });
+  return { ok: true, values, dice: order.map(([, i]) => dice[i]), rolls };
+}
+
+/* ---------- « J'ai un concept » ---------- */
+
+export type ConceptInput = { speciesId: string | null; classId: string | null; text: string };
+
+/** Le joueur envoie (ou modifie) le concept de son personnage pour un groupe. */
+export async function saveConceptAction(groupId: string, input: ConceptInput): Promise<ActionResult> {
+  const user = await requireToolUser();
+  return guard(user, async () => {
+    if (user.role !== "player") throw new RuleError("Réservé aux joueurs.");
+    const text = String(input?.text ?? "").trim().slice(0, 3000);
+    if (text.length < 10) throw new RuleError("Décris ton concept en quelques phrases.");
+    const speciesId = input?.speciesId && getSpecies(input.speciesId) ? input.speciesId : null;
+    const classId = input?.classId && getClass(input.classId) ? input.classId : null;
+    await updateDb((db) => {
+      const me = db.users.find((u) => u.id === user.id);
+      if (!me || !userGroupIds(me).includes(groupId)) throw new RuleError("Tu ne fais pas partie de ce groupe.");
+      if ((db.characters ?? []).some((c) => c.ownerId === user.id && c.groupId === groupId && !c.deadAt)) throw new RuleError("Tu as déjà un personnage dans ce groupe.");
+      const now = new Date().toISOString();
+      const list = (db.concepts ??= []);
+      const existing = list.find((c) => c.ownerId === user.id && c.groupId === groupId && c.status === "pending");
+      if (existing) Object.assign(existing, { speciesId, classId, text, updatedAt: now });
+      else list.push({ id: randomUUID(), ownerId: user.id, groupId, speciesId, classId, text, status: "pending", createdAt: now, updatedAt: now });
+    });
+  });
+}
+
+export async function withdrawConceptAction(groupId: string): Promise<ActionResult> {
+  const user = await requireToolUser();
+  return guard(user, async () => {
+    await updateDb((db) => {
+      db.concepts = (db.concepts ?? []).filter((c) => !(c.ownerId === user.id && c.groupId === groupId && c.status === "pending"));
+    });
+  });
+}
+
+/** MJ : le concept est traité (la discussion a eu lieu, ou la fiche sera faite autrement). */
+export async function resolveConceptAction(conceptId: string): Promise<ActionResult> {
+  const user = await requireToolUser();
+  return guard(user, async () => {
+    if (user.role !== "admin") throw new RuleError("Réservé au MJ.");
+    await updateDb((db) => {
+      const c = (db.concepts ?? []).find((x) => x.id === conceptId);
+      if (!c) throw new RuleError("Concept introuvable.");
+      Object.assign(c, { status: "done", updatedAt: new Date().toISOString() });
     });
   });
 }
@@ -216,6 +324,7 @@ export async function levelUpAction(characterId: string, answers: Answers, hpMod
       c.prepared = undefined;
       c.foundryTodo = { level: r.state.level, items: foundry.map((text) => ({ text, done: false })) };
       c.updatedAt = now;
+      if (c.groupId) logActivity(db, { groupId: c.groupId, actorId: c.ownerId, kind: "levelup", text: `${r.state.name} passe au niveau ${r.state.level} !`, href: "/outils/personnage", key: `levelup:${c.id}:${r.state.level}` });
       result = { hpDie, rolled, summary: r.summary, foundry };
     });
     return { ok: true, view: await view(user), levelUp: result };
@@ -344,7 +453,9 @@ export async function acceptProposalAction(proposalId: string): Promise<ActionRe
         updatedAt: now,
       };
       list.push(c);
+      logActivity(db, { groupId: p.groupId, actorId: p.ownerId, kind: "character", text: `${state.name} rejoint l'équipage (${shortLabel(state)}).`, href: "/outils/personnage", key: `character:${c.id}` });
       db.proposals = (db.proposals ?? []).filter((x) => x.id !== p.id);
+      closeConcept(db, p.ownerId, p.groupId, new Date().toISOString());
     });
   });
 }
@@ -396,6 +507,7 @@ export async function declareDeathAction(characterId: string, epitaph: string): 
         epitaph: String(epitaph ?? "").trim().slice(0, 300),
         diedAt: now,
       });
+      logActivity(db, { groupId: c.groupId, kind: "death", text: `${state.name} est tombé. Son nom rejoint le cimetière marin.`, href: "/outils/cimetiere", key: `death:${c.id}` });
     });
   });
 }
