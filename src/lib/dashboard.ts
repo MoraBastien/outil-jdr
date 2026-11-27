@@ -64,6 +64,8 @@ export type PlayerDashboard = {
   nextIsland: Isle | null;
   route: (Isle & { here: boolean })[];
   story: { number: number; title: string; date: string; summary: string; island: Isle | null } | null;
+  /** Les séances publiées, de la plus ancienne à la plus récente (les 8 dernières) : les épisodes de la saison. */
+  episodes: { number: number; title: string; date: string; summary: string; island: Isle | null }[];
   quests: { id: string; title: string; giver: string }[];
   sessions: DashSession[];
   character: {
@@ -77,7 +79,7 @@ export type PlayerDashboard = {
     spellDc: number | null;
     slots: number[];
     purseCp: number;
-    /** Équipement : les achats du marché d'abord (lignes « • »), puis le reste ; 4 au plus. */
+    /** Équipement, objet par objet : les achats du marché d'abord, puis le reste ; 6 au plus. */
     bag: string[];
     /** Nombre d'autres lignes d'équipement non affichées. */
     bagMore: number;
@@ -99,7 +101,11 @@ const sameAsNumber = (title: string, n: number) =>
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "") === `seance${n}` || title.trim() === String(n);
 
-/** Le sac : achats du marché (lignes « • ») en premier, puis les autres lignes, sans répétition. */
+/**
+ * Le sac : une liste d'objets. Les achats du marché (lignes « • ») d'abord, puis le reste.
+ * Les lignes d'équipement de départ (« Barbare : Hache à deux mains, 4 hachettes, 15 po (ou 75 po) ») sont
+ * découpées en objets ; les pièces et les choix « (ou … po) » en sont retirés (la bourse les compte déjà).
+ */
 function bagOf(equipment: string): { bag: string[]; bagMore: number } {
   const lines = equipment
     .split("\n")
@@ -107,14 +113,29 @@ function bagOf(equipment: string): { bag: string[]; bagMore: number } {
     .filter(Boolean);
   const bought = lines.filter((l) => l.startsWith("•")).reverse();
   const rest = lines.filter((l) => !l.startsWith("•"));
-  // Une ligne trop longue est coupée après une virgule, jamais au milieu d'un objet.
-  const cut = (l: string) => {
-    if (l.length <= 90) return l;
-    const i = l.lastIndexOf(",", 90);
-    return i > 30 ? `${l.slice(0, i)}…` : l;
-  };
-  const all = [...bought, ...rest].map((l) => cut(l.replace(/^[•\-*]\s*/, "").replace(/\s+/g, " ")));
-  return { bag: all.slice(0, 4), bagMore: Math.max(0, all.length - 4) };
+  const items = [...bought, ...rest].flatMap((line) => {
+    let l = line.replace(/^[•·\-*]\s*/, "").replace(/\s+/g, " ");
+    // « Barbare : … » : le nom de la source n'est pas un objet.
+    const colon = l.indexOf(" : ");
+    if (colon > 0 && colon <= 30) l = l.slice(colon + 3);
+    l = l.replace(/\s*\(ou [^)]*\)/gi, "");
+    // Couper aux virgules hors parenthèses.
+    const parts: string[] = [];
+    let depth = 0, cur = "";
+    for (const ch of l) {
+      if (ch === "(") depth++;
+      if (ch === ")") depth = Math.max(0, depth - 1);
+      if (ch === "," && depth === 0) (parts.push(cur), (cur = ""));
+      else cur += ch;
+    }
+    parts.push(cur);
+    return parts
+      .map((x) => x.trim().replace(/\.$/, ""))
+      .filter((x) => x && !/^\d+\s*(po|pa|pc|pe|pp)$/i.test(x))
+      .map((x) => x.charAt(0).toUpperCase() + x.slice(1));
+  });
+  const unique = items.filter((x, i) => items.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i);
+  return { bag: unique.slice(0, 6), bagMore: Math.max(0, unique.length - 6) };
 }
 
 export async function getPlayerDashboard(user: User, wantedGroupId?: string): Promise<PlayerDashboard> {
@@ -138,7 +159,7 @@ export async function getPlayerDashboard(user: User, wantedGroupId?: string): Pr
     quests: canUseTool(user, "quetes"),
     planning: canUseTool(user, "planning"),
   };
-  const empty: PlayerDashboard = { portCloses: null, missing: [], groups: [], group: null, harbor: null, nextIsland: null, route: [], story: null, quests: [], sessions: [], character: null, shops: [], crew: [], activity: [], checklist: [], tools };
+  const empty: PlayerDashboard = { portCloses: null, missing: [], groups: [], group: null, harbor: null, nextIsland: null, route: [], story: null, episodes: [], quests: [], sessions: [], character: null, shops: [], crew: [], activity: [], checklist: [], tools };
   if (!g) return empty;
 
   // --- L'archipel
@@ -157,6 +178,11 @@ export async function getPlayerDashboard(user: User, wantedGroupId?: string): Pr
   const last = published.at(-1);
   const lastIsland = last?.islandId ? byId.get(last.islandId) : undefined;
   const story = last ? { number: published.length, title: sameAsNumber(last.title, published.length) ? "" : last.title, date: last.date, summary: last.summary, island: lastIsland ? isle(lastIsland) : null } : null;
+  const episodes = published.slice(-8).map((s) => {
+    const n = published.indexOf(s) + 1;
+    const isl = s.islandId ? byId.get(s.islandId) : undefined;
+    return { number: n, title: sameAsNumber(s.title, n) ? "" : s.title, date: s.date, summary: s.summary, island: isl ? isle(isl) : null };
+  });
   const openQuests = quests.filter((q) => q.groupId === g.id && q.visible && q.status === "open").map((q) => ({ id: q.id, title: q.title, giver: q.giver }));
 
   // --- Les séances : fixées à venir, puis sondages ouverts
@@ -294,8 +320,8 @@ export async function getPlayerDashboard(user: User, wantedGroupId?: string): Pr
   if (character) {
     checklist.push(
       character.levelUp
-        ? { id: "niveau", label: `Monter au niveau ${character.levelUp}`, hint: "Ouvrir ma fiche", href: "/outils/personnage", done: false }
-        : { id: "niveau", label: `Fiche à jour (niveau ${character.level})`, hint: "Ouvrir ma fiche", href: "/outils/personnage", done: true },
+        ? { id: "niveau", label: `Monter au niveau ${character.levelUp}`, hint: "Ma fiche", href: "/outils/personnage", done: false }
+        : { id: "niveau", label: `Fiche à jour (niveau ${character.level})`, hint: "Ma fiche", href: "/outils/personnage", done: true },
     );
   }
   if (spellsTodo) checklist.push(spellsTodo);
@@ -327,6 +353,7 @@ export async function getPlayerDashboard(user: User, wantedGroupId?: string): Pr
     nextIsland: nextIsl ? isle(nextIsl) : null,
     route,
     story,
+    episodes,
     quests: openQuests,
     sessions: sessionsList,
     character,

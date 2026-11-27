@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Geist, Geist_Mono, Inter } from "next/font/google";
+import { Archivo, Fraunces, Geist, Geist_Mono, Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import Spotlight from "@/components/Spotlight";
 import "./globals.css";
@@ -15,6 +15,8 @@ const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono-face", disp
 // Thème « Astre déchu » (Entités) : il garde ses polices d'origine.
 const serif = Fraunces({ subsets: ["latin"], variable: "--font-serif", display: "swap", preload: false });
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap", preload: false });
+// Tableau de bord joueur « Saison en cours » : titres serrés et corps de texte.
+const archivo = Archivo({ subsets: ["latin"], variable: "--font-archivo", display: "swap", weight: ["400", "500", "600", "700", "800"] });
 
 export const metadata: Metadata = {
   title: "Le Navire",
@@ -25,7 +27,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#061219",
+  themeColor: "#0b0d12",
   colorScheme: "dark",
 };
 
@@ -52,7 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html
       lang="fr"
-      className={`${display.variable} ${sans.variable} ${mono.variable} ${serif.variable} ${inter.variable}`}
+      className={`${display.variable} ${sans.variable} ${mono.variable} ${serif.variable} ${inter.variable} ${archivo.variable}`}
       data-astral={astral ? "" : undefined}
       style={isle ? ({ ["--isle" as string]: isle } as React.CSSProperties) : undefined}
     >

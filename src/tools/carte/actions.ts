@@ -169,7 +169,7 @@ export async function deleteIslandAction(id: string): Promise<MapResult> {
   });
 }
 
-/** Le Navire jette l'ancre sur une île (ou reprend la mer avec `null`) : ses échoppes ouvrent, le site prend sa couleur. */
+/** Le Navire jette l'ancre sur une île (ou reprend la mer avec `null`) : ses échoppes ouvrent. */
 export async function setHarborAction(groupId: string, islandId: string | null): Promise<MapResult> {
   return adminChange((db) => {
     const g = (db.groups ?? []).find((x) => x.id === groupId);

@@ -9,6 +9,8 @@ import { ASTRAL_LABELS, NAV_GLYPHS, skyLine } from "@/tools/homunculus/astral/th
 import { getPlayerDashboard } from "@/lib/dashboard";
 import PlayerDashboard from "@/components/dashboard/PlayerDashboard";
 import AdminActivity from "@/components/dashboard/AdminActivity";
+import AdminDashboard from "@/components/dashboard/AdminDashboard";
+import { getAdminDashboard } from "@/lib/adminDashboard";
 
 function greeting(): string {
   const hour = Number(new Intl.DateTimeFormat("fr-FR", { hour: "numeric", hour12: false, timeZone: "Europe/Paris" }).format(new Date()));
@@ -28,6 +30,19 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <Header user={user} />
         <PageMain className="page page-dash">
           <PlayerDashboard data={data} greeting={greeting()} name={user.name} />
+        </PageMain>
+      </>
+    );
+  }
+  // MJ : le poste de commandement du groupe choisi (ce qui l'attend, la table, l'histoire, le port).
+  if (isAdmin) {
+    const { groupe } = await searchParams;
+    const data = await getAdminDashboard(groupe);
+    return (
+      <>
+        <Header user={user} />
+        <PageMain className="page page-dash">
+          <AdminDashboard data={data} greeting={greeting()} />
         </PageMain>
       </>
     );

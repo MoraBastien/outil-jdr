@@ -201,7 +201,7 @@ export async function saveShopAction(input: ShopInput): Promise<MarketResult> {
     } else {
       list.push({ id: randomUUID(), groupId: input.groupId, islandId: island.id, name, kind, blurb, items, createdAt: now, updatedAt: now });
       const group = (db.groups ?? []).find((g) => g.id === input.groupId);
-      if (group?.harborIslandId === island.id) logActivity(db, { groupId: input.groupId, kind: "shop", text: `Nouvelle échoppe ouverte au port : ${name}.`, href: "/outils/marche" });
+      if (group?.harborIslandId === island.id) logActivity(db, { groupId: input.groupId, kind: "shop", text: `Nouvelle échoppe ouverte à ${island.name} : ${name}.`, href: "/outils/marche" });
     }
     return null;
   });

@@ -247,7 +247,7 @@ export async function answerAction(pollId: string, slotId: string, answer: PollA
 
 /**
  * Séance confirmée : le joueur dit s'il sera à bord (oui / non) sur le créneau retenu.
- * Sert au bouton « Je serai à bord » du tableau de bord.
+ * Sert aux boutons de présence du tableau de bord (« À bord », « Peut-être », « Absent »).
  */
 export async function setPresenceAction(pollId: string, answer: PollAnswer): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await requireToolUser();

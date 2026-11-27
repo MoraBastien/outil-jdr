@@ -759,7 +759,7 @@ function IslandEditor({
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Île Givre" required autoFocus />
       </label>
       <fieldset className="field">
-        <legend className="label">Couleur (le site la prend quand le Navire y mouille)</legend>
+        <legend className="label">Couleur de l&apos;île (sur la carte et dans les illustrations)</legend>
         <div className="map-swatches">
           {ISLE_COLORS.map((c) => (
             <button key={c.id} type="button" className={`map-swatch${color === c.id ? " on" : ""}`} style={{ background: c.id }} aria-pressed={color === c.id} title={c.name} aria-label={c.name} onClick={() => setColor(c.id)} />

@@ -204,7 +204,7 @@ export type Quest = {
 
 /**
  * Groupe de jeu (une table, une campagne). Les membres sont les joueurs dont `groupIds` contient son id.
- * `harborIslandId` : île où mouille le Navire (ses échoppes sont ouvertes, sa couleur teinte le site).
+ * `harborIslandId` : île où mouille le Navire (ses échoppes sont ouvertes).
  * `nextIslandId` : prochaine escale annoncée.
  * `mapImage` : image de fond de la carte du groupe (chemin dans `public/` ou URL https). Absent : carte dessinée par le site.
  * `shipName` : nom du navire du groupe (outil « Équipage »). Absent : « le Navire ».

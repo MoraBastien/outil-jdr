@@ -6,7 +6,7 @@ export const SEA_COLOR = "#3fb0e6";
 
 /**
  * Teintes proposées pour les îles. Toutes assez claires pour un texte sombre posé dessus (boutons),
- * et assez lumineuses sur le fond bleu nuit. La teinte de l'île où mouille le Navire colore tout le site.
+ * et assez lumineuses sur le fond noir. La couleur de l'île sert à la carte, aux noms d'îles et aux illustrations.
  */
 export const ISLE_COLORS = [
   { id: "#3fb0e6", name: "Mer" },
