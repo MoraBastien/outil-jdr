@@ -243,6 +243,26 @@ export type Island = {
   y: number;
   status: IslandStatus;
   description: string;
+  /** Région où se trouve l'île : sa position est alors en % de la carte de la région. Absent : sur la carte de l'archipel. */
+  regionId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Région de l'archipel d'un groupe (outil « Carte ») : une zone dessinée sur la carte de l'archipel,
+ * qui ouvre sa propre carte (par exemple faite sur Inkarnate) où l'on place ses îles et ses lieux.
+ * `points` : contour sur la carte de l'archipel, en % (x1, y1, x2, y2…). `mapImage` : chemin dans `public/` ou URL https.
+ */
+export type Region = {
+  id: string;
+  groupId: string;
+  name: string;
+  color: string;
+  status: IslandStatus;
+  description: string;
+  points: number[];
+  mapImage?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -308,6 +328,7 @@ export type Db = {
   chronicle?: ChronicleSession[];
   quests?: Quest[];
   islands?: Island[];
+  regions?: Region[];
   shops?: Shop[];
   crew?: CrewMember[];
   purchases?: Purchase[];
@@ -482,6 +503,10 @@ export async function getQuests(): Promise<Quest[]> {
 
 export async function getIslands(): Promise<Island[]> {
   return (await load()).islands ?? [];
+}
+
+export async function getRegions(): Promise<Region[]> {
+  return (await load()).regions ?? [];
 }
 
 export async function getShops(): Promise<Shop[]> {

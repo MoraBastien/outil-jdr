@@ -72,3 +72,49 @@ export function islandShape(id: string): string {
   }
   return `${d} Z`;
 }
+
+/** Teintes des régions : vives, pour se distinguer les unes des autres sur la carte de l'archipel. */
+export const REGION_COLORS = [
+  { id: "#ff3b3b", name: "Écarlate" },
+  { id: "#ff9f1a", name: "Ambre" },
+  { id: "#ffe14d", name: "Safran" },
+  { id: "#3dd13d", name: "Émeraude" },
+  { id: "#00e0c0", name: "Lagon" },
+  { id: "#7fa6ff", name: "Azur" },
+  { id: "#b04dff", name: "Pourpre" },
+  { id: "#ff4fa3", name: "Rose" },
+  { id: "#ff7a1a", name: "Rouille" },
+  { id: "#e8f4ff", name: "Neige" },
+  { id: "#d0d0d0", name: "Brume" },
+] as const;
+export const isRegionColor = (c: unknown): c is string => typeof c === "string" && REGION_COLORS.some((x) => x.id === c);
+
+/** Contour d'une région : 3 à 60 points en % (0 à 100), sous forme plate [x1, y1, x2, y2…]. */
+export function cleanPoints(v: unknown): number[] | null {
+  if (!Array.isArray(v) || v.length % 2 !== 0 || v.length < 6 || v.length > 120) return null;
+  const out: number[] = [];
+  for (const n of v) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return null;
+    out.push(Math.min(100, Math.max(0, Math.round(x * 10) / 10)));
+  }
+  return out;
+}
+
+/** Paires [x, y] d'un contour plat. */
+export const pairs = (pts: number[]) => Array.from({ length: pts.length / 2 }, (_, i) => ({ x: pts[2 * i], y: pts[2 * i + 1] }));
+
+/** Centre d'une région (barycentre de la surface du polygone ; moyenne des points s'il est dégénéré). */
+export function centerOf(pts: number[]): { x: number; y: number } {
+  const p = pairs(pts);
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0; i < p.length; i++) {
+    const q = p[i], r = p[(i + 1) % p.length];
+    const f = q.x * r.y - r.x * q.y;
+    a += f;
+    cx += (q.x + r.x) * f;
+    cy += (q.y + r.y) * f;
+  }
+  if (Math.abs(a) < 1e-6) return { x: p.reduce((s, q) => s + q.x, 0) / p.length, y: p.reduce((s, q) => s + q.y, 0) / p.length };
+  return { x: cx / (3 * a), y: cy / (3 * a) };
+}

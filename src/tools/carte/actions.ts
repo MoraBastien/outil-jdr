@@ -1,12 +1,13 @@
 "use server";
-// Carte de l'archipel : le MJ place les îles de chaque groupe, indique où mouille le Navire et la prochaine escale.
+// Carte de l'archipel : le MJ dessine les régions sur la carte de l'archipel, place les îles (sur l'archipel ou dans
+// la carte d'une région), indique où mouille le Navire et la prochaine escale.
 // La route se trace toute seule à partir des séances de la chronique rattachées à une île.
 
 import { requireUser, canUseTool } from "@/lib/auth";
-import { getChronicle, getGroups, getIslands, getShops, randomUUID, updateDb, type Db, type Island, type User } from "@/lib/db";
+import { getChronicle, getGroups, getIslands, getRegions, getShops, randomUUID, updateDb, type Db, type Island, type Region, type User } from "@/lib/db";
 import { visibleGroups } from "@/lib/groups";
 import { logActivity } from "@/lib/activity";
-import { CARTE_TOOL_ID, cleanMapImage, isIsleColor, isIslandStatus, SEA_COLOR, type IslandStatusId } from "./meta";
+import { CARTE_TOOL_ID, centerOf, cleanMapImage, cleanPoints, isIsleColor, isIslandStatus, isRegionColor, REGION_COLORS, SEA_COLOR, type IslandStatusId } from "./meta";
 import { routeOf } from "./route";
 
 export type IslandView = {
@@ -17,14 +18,28 @@ export type IslandView = {
   y: number;
   status: IslandStatusId;
   description: string;
+  /** Région de l'île (position en % de la carte de la région) ; null : sur la carte de l'archipel. */
+  regionId: string | null;
   /** Séances vécues sur cette île (numéro dans la chronique). */
   visits: { number: number; title: string; date: string }[];
   shops: number;
+};
+export type RegionView = {
+  id: string;
+  name: string;
+  color: string;
+  status: IslandStatusId;
+  description: string;
+  /** Contour plat en % de la carte de l'archipel. */
+  points: number[];
+  center: { x: number; y: number };
+  mapImage: string | null;
 };
 export type MapGroup = {
   id: string;
   name: string;
   islands: IslandView[];
+  regions: RegionView[];
   /** Îles de la route, dans l'ordre des séances (sans répétition consécutive). */
   route: string[];
   harborId: string | null;
@@ -34,7 +49,8 @@ export type MapGroup = {
 };
 export type MapView = { isAdmin: boolean; groups: MapGroup[] };
 export type MapResult = { ok: true; view: MapView } | { ok: false; error: string };
-export type IslandInput = { id?: string | null; groupId: string; name: string; color: string; x: number; y: number; status: string; description: string };
+export type IslandInput = { id?: string | null; groupId: string; regionId?: string | null; name: string; color: string; x: number; y: number; status: string; description: string };
+export type RegionInput = { id?: string | null; groupId: string; name: string; color: string; status: string; description: string; points: number[]; mapImage: string | null };
 
 async function requireToolUser(): Promise<User> {
   const user = await requireUser();
@@ -45,11 +61,14 @@ async function requireToolUser(): Promise<User> {
 const clamp = (n: unknown) => Math.min(96, Math.max(4, Math.round(Number(n) * 10) / 10 || 50));
 
 async function view(user: User): Promise<MapView> {
-  const [allGroups, islands, sessions, shops] = await Promise.all([getGroups(), getIslands(), getChronicle(), getShops()]);
+  const [allGroups, islands, regions, sessions, shops] = await Promise.all([getGroups(), getIslands(), getRegions(), getChronicle(), getShops()]);
   const isAdmin = user.role === "admin";
   const groups: MapGroup[] = [];
   for (const g of visibleGroups(user, allGroups)) {
-    const visible = islands.filter((i) => i.groupId === g.id && (isAdmin || i.status !== "hidden"));
+    const regs = regions.filter((r) => r.groupId === g.id && (isAdmin || r.status !== "hidden"));
+    const regIds = new Set(regs.map((r) => r.id));
+    // Une île d'une région cachée reste cachée aux joueurs.
+    const visible = islands.filter((i) => i.groupId === g.id && (isAdmin || (i.status !== "hidden" && (!i.regionId || regIds.has(i.regionId)))));
     const ids = new Set(visible.map((i) => i.id));
     const ordered = sessions
       .filter((s) => s.groupId === g.id && (isAdmin || !s.draft))
@@ -65,8 +84,19 @@ async function view(user: User): Promise<MapView> {
         y: i.y,
         status: i.status,
         description: i.description,
+        regionId: i.regionId && regIds.has(i.regionId) ? i.regionId : null,
         visits: ordered.flatMap((s, n) => (s.islandId === i.id ? [{ number: n + 1, title: s.title, date: s.date }] : [])),
         shops: shops.filter((s) => s.islandId === i.id).length,
+      })),
+      regions: regs.map((r) => ({
+        id: r.id,
+        name: r.name,
+        color: r.color,
+        status: r.status,
+        description: r.description,
+        points: r.points,
+        center: centerOf(r.points),
+        mapImage: r.mapImage ?? null,
       })),
       route: routeOf(g.id, sessions, isAdmin, (id) => ids.has(id)),
       harborId: g.harborIslandId && ids.has(g.harborIslandId) ? g.harborIslandId : null,
@@ -95,16 +125,18 @@ export async function saveIslandAction(input: IslandInput): Promise<MapResult> {
   const color = isIsleColor(input?.color) ? input.color : SEA_COLOR;
   const status = isIslandStatus(input?.status) ? input.status : "seen";
   if (!name) return { ok: false, error: "Donne un nom à l'île." };
+  const regionId = input?.regionId ? String(input.regionId) : null;
   return adminChange((db) => {
     if (!(db.groups ?? []).some((g) => g.id === input.groupId)) return "Groupe introuvable.";
+    if (regionId && !(db.regions ?? []).some((r) => r.id === regionId && r.groupId === input.groupId)) return "Région introuvable.";
     const now = new Date().toISOString();
     const list = (db.islands ??= []);
     if (input.id) {
       const i = list.find((x) => x.id === input.id && x.groupId === input.groupId);
       if (!i) return "Île introuvable.";
-      Object.assign(i, { name, description, color, status, x: clamp(input.x), y: clamp(input.y), updatedAt: now });
+      Object.assign(i, { name, description, color, status, regionId, x: clamp(input.x), y: clamp(input.y), updatedAt: now });
     } else {
-      const island: Island = { id: randomUUID(), groupId: input.groupId, name, description, color, status, x: clamp(input.x), y: clamp(input.y), createdAt: now, updatedAt: now };
+      const island: Island = { id: randomUUID(), groupId: input.groupId, regionId, name, description, color, status, x: clamp(input.x), y: clamp(input.y), createdAt: now, updatedAt: now };
       list.push(island);
     }
     return null;
@@ -183,6 +215,47 @@ export async function setMapImageAction(groupId: string, image: string | null): 
     const g = (db.groups ?? []).find((x) => x.id === groupId);
     if (!g) return "Groupe introuvable.";
     g.mapImage = clean;
+    return null;
+  });
+}
+
+/** Crée (sans `id`) ou modifie une région : son contour sur la carte de l'archipel et l'image de sa propre carte. */
+export async function saveRegionAction(input: RegionInput): Promise<MapResult> {
+  const name = String(input?.name ?? "").trim().slice(0, 60);
+  const description = String(input?.description ?? "").trim().slice(0, 2000);
+  const color = isRegionColor(input?.color) ? input.color : REGION_COLORS[0].id;
+  const status = isIslandStatus(input?.status) ? input.status : "seen";
+  const points = cleanPoints(input?.points);
+  const rawImage = typeof input?.mapImage === "string" ? input.mapImage.trim() : "";
+  const mapImage = rawImage ? cleanMapImage(rawImage) : null;
+  if (!name) return { ok: false, error: "Donne un nom à la région." };
+  if (!points) return { ok: false, error: "Le contour de la région doit avoir au moins 3 points." };
+  if (rawImage && !mapImage) return { ok: false, error: "Image invalide : un chemin du site (/cartes/regions/ma-region.jpg) ou une adresse https." };
+  return adminChange((db) => {
+    if (!(db.groups ?? []).some((g) => g.id === input.groupId)) return "Groupe introuvable.";
+    const now = new Date().toISOString();
+    const list = (db.regions ??= []);
+    if (input.id) {
+      const r = list.find((x) => x.id === input.id && x.groupId === input.groupId);
+      if (!r) return "Région introuvable.";
+      Object.assign(r, { name, description, color, status, points, mapImage, updatedAt: now });
+    } else {
+      const region: Region = { id: randomUUID(), groupId: input.groupId, name, description, color, status, points, mapImage, createdAt: now, updatedAt: now };
+      list.push(region);
+    }
+    return null;
+  });
+}
+
+/** Supprime une région. Ses îles reviennent sur la carte de l'archipel, au centre de l'ancienne région. */
+export async function deleteRegionAction(id: string): Promise<MapResult> {
+  return adminChange((db) => {
+    const region = (db.regions ?? []).find((r) => r.id === id);
+    if (!region) return "Région introuvable.";
+    const c = centerOf(region.points);
+    for (const i of db.islands ?? [])
+      if (i.regionId === id) Object.assign(i, { regionId: null, x: clamp(c.x), y: clamp(c.y), updatedAt: new Date().toISOString() });
+    db.regions = (db.regions ?? []).filter((r) => r.id !== id);
     return null;
   });
 }
