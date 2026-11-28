@@ -28,17 +28,19 @@ type Run = (p: Promise<MapResult>) => Promise<boolean>;
 const W = 1000;
 const H = 600;
 
-export default function MapTool({ player }: { player: ToolPlayer }) {
-  const [view, setView] = useState<MapView | null>(null);
+export default function MapTool({ player, initial }: { player: ToolPlayer; initial?: MapView }) {
+  // Données préchargées par la page serveur : l'outil s'affiche dès le HTML, sans aller-retour.
+  const [view, setView] = useState<MapView | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [tab, setTab] = useState<string | null>(null);
 
   useEffect(() => {
-    getMapAction()
-      .then(setView)
-      .catch(() => setError("Impossible de déplier la carte."));
-  }, []);
+    if (!initial)
+      getMapAction()
+        .then(setView)
+        .catch(() => setError("Impossible de déplier la carte."));
+  }, [initial]);
 
   const run: Run = (p) =>
     new Promise((resolve) => {

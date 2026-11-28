@@ -433,18 +433,20 @@ function PollCard({ poll, data, now, h }: { poll: Poll; data: PlanningData; now:
 
 /* ---------- Outil ---------- */
 
-export default function Planning({ player }: { player: ToolPlayer }) {
-  const [data, setData] = useState<PlanningData | null>(null);
+export default function Planning({ player, initial }: { player: ToolPlayer; initial?: PlanningData }) {
+  // Données préchargées par la page serveur : l'outil s'affiche dès le HTML, sans aller-retour.
+  const [data, setData] = useState<PlanningData | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [now, setNow] = useState("");
 
   useEffect(() => {
     setNow(nowKey());
-    getPlanningAction()
-      .then(setData)
-      .catch(() => setError("Impossible de charger le planning."));
-  }, []);
+    if (!initial)
+      getPlanningAction()
+        .then(setData)
+        .catch(() => setError("Impossible de charger le planning."));
+  }, [initial]);
 
   const run = (p: Promise<PlanningResult>) =>
     new Promise<boolean>((resolve) => {

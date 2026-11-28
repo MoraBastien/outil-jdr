@@ -747,12 +747,9 @@ html[data-astral] { --font-title: var(--font-serif), "Georgia", serif; --font-bo
   }
 }
 
-.brand-mark { transition: transform 0.5s cubic-bezier(0.3, 1.5, 0.5, 1), box-shadow 0.3s; animation: mark-glow 4s ease-in-out infinite alternate; }
+/* Pas d'animation en boucle sur l'ombre : une ombre animée se redessine à chaque image, sur toutes les pages. */
+.brand-mark { transition: transform 0.5s cubic-bezier(0.3, 1.5, 0.5, 1), box-shadow 0.3s; }
 .brand:hover .brand-mark { transform: rotate(90deg) scale(1.08); }
-@keyframes mark-glow {
-  from { box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--accent) 45%, transparent); }
-  to { box-shadow: 0 4px 22px -2px color-mix(in srgb, var(--accent) 85%, transparent); }
-}
 .avatar { transition: box-shadow 0.25s, transform 0.25s var(--ease), border-color 0.25s; }
 .sb-user:hover .avatar { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); transform: scale(1.05); }
 
@@ -855,7 +852,7 @@ details:not(.inline-confirm)[open]::details-content { block-size: auto; opacity:
 .pop { animation: pop 0.45s cubic-bezier(0.3, 1.5, 0.5, 1) both; }
 
 /* ---------- Connexion ---------- */
-.login-mark { animation: float 5s ease-in-out infinite, mark-glow 4s ease-in-out infinite alternate; }
+.login-mark { animation: float 5s ease-in-out infinite; }
 @keyframes float { 50% { transform: translateY(-6px) rotate(6deg); } }
 
 /* ---------- Apparition au défilement ---------- */

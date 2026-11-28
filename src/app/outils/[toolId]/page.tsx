@@ -24,6 +24,10 @@ export default async function ToolPage({ params }: { params: Promise<{ toolId: s
     ...(entity ? { altSheet: entity } : {}),
     profile: user.profile,
   };
+  // Données préchargées côté serveur (outils qui le proposent) : en cas d'échec, l'outil les recharge lui-même.
+  // Pas pour la fiche d'un joueur de l'Atelier : il voit la fiche de son entité, chargée à part.
+  const skipPreload = Boolean(entity) && tool.id === "personnage";
+  const initial = tool.preload && !skipPreload ? await tool.preload().catch(() => undefined) : undefined;
   const crumbLabel = entity && tool.id === "personnage" ? ASTRAL_LABELS.personnage : tool.name;
   const crumbs = (
     <nav className="breadcrumbs" aria-label="Fil d'Ariane">
@@ -39,7 +43,7 @@ export default async function ToolPage({ params }: { params: Promise<{ toolId: s
         <Header user={user} />
         <PageMain className="page page-wide stack">
           {crumbs}
-          <Tool player={player} />
+          <Tool player={player} initial={initial} />
         </PageMain>
       </>
     );
@@ -60,7 +64,7 @@ export default async function ToolPage({ params }: { params: Promise<{ toolId: s
           <p className="muted">{tool.description}</p>
         </div>
         <section className="card card-lg">
-          <Tool player={player} />
+          <Tool player={player} initial={initial} />
         </section>
       </PageMain>
     </>

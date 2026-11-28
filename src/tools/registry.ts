@@ -18,6 +18,15 @@ import Cemetery from "./cemetery/Cemetery";
 import CemeteryWidget from "./cemetery/CemeteryWidget";
 import { CEMETERY_TOOL_ID } from "./cemetery/meta";
 import Chronicle from "./chronicle/Chronicle";
+import { getChronicleAction } from "./chronicle/actions";
+import { getVaultAction } from "./vault/actions";
+import { getMarketAction } from "./marche/actions";
+import { getPlanningAction } from "./planning/actions";
+import { getCemeteryAction } from "./cemetery/actions";
+import { getCharacterViewAction } from "./character/actions";
+import { getCrewAction } from "./equipage/actions";
+import { getMapAction } from "./carte/actions";
+import { getQuestsAction } from "./quests/actions";
 import ChronicleWidget from "./chronicle/ChronicleWidget";
 import QuestsTool from "./quests/QuestsTool";
 import QuestsWidget from "./quests/QuestsWidget";
@@ -77,7 +86,14 @@ export type ToolDefinition = {
   name: string;
   description: string;
   icon: string;
-  component: ComponentType<{ player: ToolPlayer }>;
+  // `initial` : les données préchargées par `preload` (absent si l'outil n'en a pas) ; leur type dépend de l'outil.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  component: ComponentType<{ player: ToolPlayer; initial?: any }>;
+  /**
+   * Données de l'outil lues côté serveur avant le rendu de la page, passées au composant en `initial` :
+   * l'outil s'affiche avec son contenu dès le HTML, sans attendre le JavaScript puis un aller-retour serveur.
+   */
+  preload?: () => Promise<unknown>;
   /** Outil pleine largeur, sans carte ni titre de page (il affiche son propre en-tête). */
   wide?: boolean;
   /** Panneau facultatif pour le tableau de bord. */
@@ -127,6 +143,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Le MJ propose des dates de séance à chaque groupe, chacun indique ses disponibilités.",
     icon: "📅",
     component: Planning,
+    preload: getPlanningAction,
     section: "histoire",
     short: "Planning",
     widget: { component: PlanningWidget, title: "Prochaines sessions", wide: true, order: 10 },
@@ -137,6 +154,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Ta fiche D&D (règles 2024) : création guidée, explications et montée de niveau pas à pas.",
     icon: "🛡️",
     component: CharacterHost,
+    preload: getCharacterViewAction,
     section: "personnage",
     short: "Fiche",
     wide: true,
@@ -150,6 +168,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Expérimente la création de personnages et garde tes essais. Ici, c'est toi qui choisis le niveau.",
     icon: "🗝️",
     component: VaultTool,
+    preload: getVaultAction,
     section: "creation",
     short: "Coffre",
     wide: true,
@@ -160,6 +179,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "La frise des séances : résumés et moments marquants de ta campagne.",
     icon: "📖",
     component: Chronicle,
+    preload: getChronicleAction,
     section: "histoire",
     short: "Chronique",
     widget: { component: ChronicleWidget, title: "Dernière séance", order: 15 },
@@ -170,6 +190,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Le journal de quêtes du groupe : en cours, pistes et quêtes terminées.",
     icon: "📜",
     component: QuestsTool,
+    preload: getQuestsAction,
     section: "histoire",
     short: "Quêtes",
     widget: { component: QuestsWidget, title: "Quêtes en cours", order: 16 },
@@ -180,6 +201,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Les héros tombés de ta campagne, et leur épitaphe.",
     icon: "🪦",
     component: Cemetery,
+    preload: getCemeteryAction,
     section: "personnage",
     short: "Cimetière",
     widget: { component: CemeteryWidget, title: "Cimetière", order: 40 },
@@ -210,6 +232,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "L'archipel : les îles visitées, la route du Navire, l'escale actuelle et la prochaine.",
     icon: "🗺️",
     component: MapTool,
+    preload: getMapAction,
     section: "histoire",
     short: "Carte",
     wide: true,
@@ -220,6 +243,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Les échoppes de l'île où mouille le Navire : achète avec les pièces de ta fiche.",
     icon: "⚖️",
     component: Market,
+    preload: getMarketAction,
     section: "escale",
     short: "Marché",
     wide: true,
@@ -230,6 +254,7 @@ export const TOOLS: ToolDefinition[] = [
     description: "Les marins du Navire : qui tient la barre, qui fait la cuisine, qui grimpe à la vigie.",
     icon: "⚓",
     component: CrewTool,
+    preload: getCrewAction,
     section: "escale",
     short: "Équipage",
     wide: true,

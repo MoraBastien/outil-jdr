@@ -22,18 +22,20 @@ import { formatCp, priceInput } from "./meta";
 type Run = (p: Promise<MarketResult>) => Promise<boolean>;
 const when = (iso: string) => new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" }).format(new Date(iso));
 
-export default function Market({ player }: { player: ToolPlayer }) {
-  const [view, setView] = useState<MarketView | null>(null);
+export default function Market({ player, initial }: { player: ToolPlayer; initial?: MarketView }) {
+  // Données préchargées par la page serveur : l'outil s'affiche dès le HTML, sans aller-retour.
+  const [view, setView] = useState<MarketView | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [tab, setTab] = useState<string | null>(null);
 
   useEffect(() => {
-    getMarketAction()
-      .then(setView)
-      .catch(() => setError("Impossible d'ouvrir le marché."));
-  }, []);
+    if (!initial)
+      getMarketAction()
+        .then(setView)
+        .catch(() => setError("Impossible d'ouvrir le marché."));
+  }, [initial]);
 
   const run: Run = (p) =>
     new Promise((resolve) => {

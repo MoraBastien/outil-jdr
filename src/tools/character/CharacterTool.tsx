@@ -48,8 +48,9 @@ async function withdrawFromCharacter(groupId: string): Promise<ActionResult> {
   return { ok: true, view: await getCharacterViewAction() };
 }
 
-export default function CharacterTool({ player }: { player: ToolPlayer }) {
-  const [view, setView] = useState<CharacterView | null>(null);
+export default function CharacterTool({ player, initial: preloaded }: { player: ToolPlayer; initial?: CharacterView }) {
+  // Données préchargées par la page serveur : l'outil s'affiche dès le HTML, sans aller-retour.
+  const [view, setView] = useState<CharacterView | null>(preloaded ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [levelUpFor, setLevelUpFor] = useState<string | null>(null);
@@ -65,10 +66,11 @@ export default function CharacterTool({ player }: { player: ToolPlayer }) {
       setInitial({ group: q.get("groupe"), levelUp: q.get("levelup") });
       window.history.replaceState(null, "", window.location.pathname);
     }
-    getCharacterViewAction()
-      .then(setView)
-      .catch(() => setError("Impossible de charger les fiches."));
-  }, []);
+    if (!preloaded)
+      getCharacterViewAction()
+        .then(setView)
+        .catch(() => setError("Impossible de charger les fiches."));
+  }, [preloaded]);
 
   useEffect(() => {
     if (!view || view.isAdmin) return;

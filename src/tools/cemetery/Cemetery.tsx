@@ -7,18 +7,20 @@ import { getCemeteryAction, reviveAction, setEpitaphAction, type CemeteryResult,
 
 const fmt = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 
-export default function Cemetery({ player }: { player: ToolPlayer }) {
-  const [view, setView] = useState<CemeteryView | null>(null);
+export default function Cemetery({ player, initial }: { player: ToolPlayer; initial?: CemeteryView }) {
+  // Données préchargées par la page serveur : l'outil s'affiche dès le HTML, sans aller-retour.
+  const [view, setView] = useState<CemeteryView | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
 
   useEffect(() => {
-    getCemeteryAction()
-      .then(setView)
-      .catch(() => setError("Impossible d'ouvrir le cimetière."));
-  }, []);
+    if (!initial)
+      getCemeteryAction()
+        .then(setView)
+        .catch(() => setError("Impossible d'ouvrir le cimetière."));
+  }, [initial]);
 
   const run = (p: Promise<CemeteryResult>) =>
     new Promise<boolean>((resolve) => {

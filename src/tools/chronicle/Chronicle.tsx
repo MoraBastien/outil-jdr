@@ -25,17 +25,19 @@ const fmtDate = (d: string) => {
 
 type Run = (p: Promise<ChronicleResult>) => Promise<boolean>;
 
-export default function Chronicle({ player }: { player: ToolPlayer }) {
-  const [view, setView] = useState<ChronicleView | null>(null);
+export default function Chronicle({ player, initial }: { player: ToolPlayer; initial?: ChronicleView }) {
+  // Préchargée par la page serveur : la chronique s'affiche dès le HTML.
+  const [view, setView] = useState<ChronicleView | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [tab, setTab] = useState<string | null>(null);
 
   useEffect(() => {
+    if (initial) return;
     getChronicleAction()
       .then(setView)
       .catch(() => setError("Impossible d'ouvrir la chronique."));
-  }, []);
+  }, [initial]);
 
   const run: Run = (p) =>
     new Promise((resolve) => {

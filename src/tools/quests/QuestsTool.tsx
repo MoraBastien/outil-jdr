@@ -20,8 +20,9 @@ import QuestSummary, { type QuestSummaryData } from "./QuestSummary";
 
 type Run = (p: Promise<QuestsResult>) => Promise<boolean>;
 
-export default function QuestsTool({ player }: { player: ToolPlayer }) {
-  const [view, setView] = useState<QuestsView | null>(null);
+export default function QuestsTool({ player, initial }: { player: ToolPlayer; initial?: QuestsView }) {
+  // Données préchargées par la page serveur : l'outil s'affiche dès le HTML, sans aller-retour.
+  const [view, setView] = useState<QuestsView | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [tab, setTab] = useState<string | null>(null);
@@ -37,10 +38,11 @@ export default function QuestsTool({ player }: { player: ToolPlayer }) {
   }, []);
 
   useEffect(() => {
-    getQuestsAction()
-      .then(setView)
-      .catch(() => setError("Impossible d'ouvrir le journal des quêtes."));
-  }, []);
+    if (!initial)
+      getQuestsAction()
+        .then(setView)
+        .catch(() => setError("Impossible d'ouvrir le journal des quêtes."));
+  }, [initial]);
 
   const run: Run = (p) =>
     new Promise((resolve) => {

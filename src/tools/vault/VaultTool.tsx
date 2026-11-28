@@ -27,8 +27,9 @@ import {
 
 type Screen = { kind: "list" } | { kind: "new" } | { kind: "open"; id: string };
 
-export default function VaultTool({ player }: { player: ToolPlayer }) {
-  const [vault, setVault] = useState<VaultData | null>(null);
+export default function VaultTool({ player, initial }: { player: ToolPlayer; initial?: VaultData }) {
+  // Données préchargées par la page serveur : l'outil s'affiche dès le HTML, sans aller-retour.
+  const [vault, setVault] = useState<VaultData | null>(initial ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [screen, setScreen] = useState<Screen>({ kind: "list" });
@@ -36,10 +37,11 @@ export default function VaultTool({ player }: { player: ToolPlayer }) {
   const [proposeOpen, setProposeOpen] = useState(false);
 
   useEffect(() => {
-    getVaultAction()
-      .then(setVault)
-      .catch(() => setError("Impossible d'ouvrir le coffre."));
-  }, []);
+    if (!initial)
+      getVaultAction()
+        .then(setVault)
+        .catch(() => setError("Impossible d'ouvrir le coffre."));
+  }, [initial]);
 
   const run = (p: Promise<VaultResult>) =>
     new Promise<VaultResult | null>((resolve) => {
