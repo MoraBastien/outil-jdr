@@ -2230,7 +2230,31 @@ a.nv-pill.p-todo:hover { color: var(--text); }
 .map-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; }
 .map-legend span { display: inline-flex; align-items: center; gap: 8px; }
 .map-key { display: inline-block; width: 22px; height: 0; border-top: 2.5px dotted rgba(238, 245, 246, 0.6); }
-.map-key-next { border-top: 2.5px dashed var(--accent); }
+.map-key-next { border-top: 2.5px dashed var(--muted); opacity: 0.8; }
+/* Le voyage : en mer (tirets ambre) ou à pied (pointillés clairs). La forme du tracé porte le mode, pas seulement la couleur. */
+.map-route-sea { stroke: var(--accent); stroke-width: 3; stroke-dasharray: 10 8; }
+.map-route-foot { stroke: #f2f3f5; stroke-width: 3.5; stroke-dasharray: 0.5 9; stroke-linecap: round; }
+.map-route-next { opacity: 0.6; }
+.map-key-sea { border-top: 2.5px dashed var(--accent); }
+.map-key-foot { border-top: 3px dotted #f2f3f5; }
+.map-pawn { pointer-events: none; }
+.map-pawn-disc { fill: var(--accent); stroke: #0b0d12; stroke-width: 3; }
+.map-pawn-ink { fill: var(--accent-text); }
+.map-add { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.map-kinds { display: grid; gap: 6px; }
+.map-kind { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); cursor: pointer; box-shadow: inset 0 0 0 1px var(--border); }
+.map-kind.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.map-kind input { margin-top: 3px; accent-color: var(--accent); }
+.map-kind > span { display: flex; flex-direction: column; gap: 1px; }
+.map-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.map-steps li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--border); }
+.map-steps li:first-child { border-top: 0; }
+.map-steps li.here .map-step-name > span:first-child { color: var(--accent); font-weight: 700; }
+.map-step-name { display: flex; flex-direction: column; align-items: flex-start; min-height: 40px; justify-content: center; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.map-step-name:hover > span:first-child { color: var(--accent-strong); }
+.map-step-mode { width: 22px; height: 0; border-top: 3px dashed var(--accent); }
+.map-step-mode.foot { border-top: 3px dotted #f2f3f5; }
+.map-step-switch { min-height: 32px; padding: 0 10px; font-size: 0.8rem; }
 .map-key-hidden { width: 14px; height: 10px; border: 1.5px dashed var(--muted); border-radius: 50%; }
 .map-side { position: sticky; top: 20px; }
 .map-panel .subtitle { color: var(--isle-c); }

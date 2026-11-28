@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, useTransition, type KeyboardEvent, type MouseEvent } from "react";
 import Link from "next/link";
 import type { ToolPlayer } from "../registry";
+import type { Travel } from "@/lib/db";
 import {
   deleteIslandAction,
   deleteRegionAction,
@@ -16,6 +17,9 @@ import {
   setHarborAction,
   setMapImageAction,
   setNextAction,
+  goToAction,
+  removeLastStepAction,
+  setStepTravelAction,
   type IslandView,
   type MapGroup,
   type MapResult,
@@ -91,7 +95,11 @@ export default function MapTool({ player, initial }: { player: ToolPlayer; initi
 }
 
 type Pt = { x: number; y: number };
-type Mode = { kind: "idle" } | { kind: "add" } | { kind: "move"; id: string } | { kind: "draw"; id: string | null; pts: Pt[] };
+/** Ce que le clic ajoute : une étape gagnée en mer ou à pied, ou un lieu seul (hors du voyage). */
+type AddKind = Travel | "place";
+type Mode = { kind: "idle" } | { kind: "add"; as: AddKind } | { kind: "move"; id: string } | { kind: "draw"; id: string | null; pts: Pt[] };
+const ADD_LABEL: Record<AddKind, string> = { foot: "Étape à pied", sea: "Étape en mer", place: "Lieu seul" };
+const how = (t: Travel) => (t === "foot" ? "à pied" : "en mer");
 const ZOOMS = [1, 1.5, 2, 3];
 
 /** Retire les répétitions consécutives d'une suite (même clé). */
@@ -104,13 +112,15 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
   const regionById = new Map(group.regions.map((r) => [r.id, r]));
   const harbor = group.harborId ? byId.get(group.harborId) : undefined;
   const next = group.nextId ? byId.get(group.nextId) : undefined;
+  // Le groupe se trouve à sa dernière étape ; à défaut (aucune étape), là où mouille le Navire.
+  const groupIsle = (group.groupAt ? byId.get(group.groupAt) : undefined) ?? harbor;
 
   // Niveau affiché : la carte de l'archipel (null) ou celle d'une région.
   const [regionId, setRegionId] = useState<string | null>(null);
   const region = regionId ? regionById.get(regionId) : undefined;
   const level = region?.id ?? null;
-  const [selIsle, setSelIsle] = useState<string | null>(harbor && !harbor.regionId ? harbor.id : null);
-  const [selRegion, setSelRegion] = useState<string | null>(harbor?.regionId ?? null);
+  const [selIsle, setSelIsle] = useState<string | null>(groupIsle && !groupIsle.regionId ? groupIsle.id : null);
+  const [selRegion, setSelRegion] = useState<string | null>(groupIsle?.regionId ?? null);
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
   const [draft, setDraft] = useState<Pt | null>(null);
   const [regionDraft, setRegionDraft] = useState<number[] | null>(null);
@@ -131,19 +141,24 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
   const sel = selected && here(selected) ? selected : undefined;
   const selReg = !level && selRegion ? regionById.get(selRegion) : undefined;
 
-  // Route : suite des îles des séances, puis l'escale actuelle si elle n'y est pas encore.
-  const routeIds = [...group.route];
-  if (harbor && routeIds.at(-1) !== harbor.id) routeIds.push(harbor.id);
-  const routeIsles = routeIds.map((id) => byId.get(id)).filter((i): i is IslandView => Boolean(i));
-  const routePts = level
-    ? dedupe(routeIsles.filter(here), (i) => i.id).map((i) => px(i))
-    : dedupe(routeIsles, (i) => i.regionId ?? i.id).map((i) => px(onArchipel(i)));
-  const from = harbor ?? routeIsles.at(-1);
+  // Le voyage : les étapes dans l'ordre, chacune gagnée en mer ou à pied. Sur la carte d'une région, les tronçons
+  // entre deux lieux de la région ; sur l'archipel, d'une région à l'autre (le mode est celui de l'arrivée).
+  const steps = group.route.flatMap((s) => {
+    const isle = byId.get(s.id);
+    return isle ? [{ isle, travel: s.travel, index: s.index }] : [];
+  });
+  const shown = level ? dedupe(steps.filter((s) => here(s.isle)), (s) => s.isle.id) : dedupe(steps, (s) => s.isle.regionId ?? s.isle.id);
+  const ptOf = (i: IslandView) => (level ? px(i) : px(onArchipel(i)));
+  const legs = shown.slice(1).map((s, k) => ({ a: ptOf(shown[k].isle), b: ptOf(s.isle), travel: s.travel }));
+  const from = groupIsle ?? steps.at(-1)?.isle;
   const pos = (i: IslandView) => (level ? (here(i) ? px(i) : null) : px(onArchipel(i)));
   const fromPt = from ? pos(from) : null;
   const nextPt = next ? pos(next) : null;
   const sameSpot = !from || !next || (level ? from.id === next.id : (from.regionId ?? from.id) === (next.regionId ?? next.id));
+  const groupPt = groupIsle ? pos(groupIsle) : null;
   const shipAt = harbor ? pos(harbor) : null;
+  // Le Navire et le groupe au même endroit : le Navire se décale pour ne pas cacher le pion.
+  const shipBeside = Boolean(shipAt && groupPt && shipAt.x === groupPt.x && shipAt.y === groupPt.y);
 
   const idle = mode.kind === "idle";
   const reset = () => (setMode({ kind: "idle" }), setDraft(null));
@@ -152,7 +167,7 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
     setRegionDraft(null);
     setZoom(1);
     setRegionId(id);
-    setSelIsle(harbor?.regionId === id ? harbor.id : null);
+    setSelIsle(groupIsle?.regionId === id ? groupIsle.id : null);
   };
   const backToArchipel = () => {
     reset();
@@ -187,6 +202,17 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
       setSelIsle(null);
       setMode({ kind: "idle" });
     }
+  };
+  /** Montre un lieu du voyage : ouvre sa carte (région ou archipel) puis le sélectionne. */
+  const focusIsle = (id: string) => {
+    const i = byId.get(id);
+    if (!i) return;
+    if ((i.regionId ?? null) !== level) {
+      if (i.regionId) openRegion(i.regionId);
+      else backToArchipel();
+    }
+    setSelIsle(id);
+    setSelRegion(null);
   };
   const pickIsle = (id: string) => {
     if (!idle) return;
@@ -223,9 +249,14 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
           {isAdmin &&
             (idle ? (
               <>
-                <button type="button" className="btn btn-small" onClick={() => setMode({ kind: "add" })} disabled={busy}>
-                  ＋ {level ? "Ajouter un lieu" : "Ajouter une île"}
-                </button>
+                {/* Trois façons d'ajouter : une étape du voyage (à pied ou en mer) ou un lieu seul. */}
+                <span className="map-add" role="group" aria-label="Ajouter sur la carte">
+                  {(["foot", "sea", "place"] as const).map((k) => (
+                    <button key={k} type="button" className={`btn btn-small${k === "place" ? " btn-ghost" : ""}`} onClick={() => setMode({ kind: "add", as: k })} disabled={busy}>
+                      ＋ {ADD_LABEL[k]}
+                    </button>
+                  ))}
+                </span>
                 {!level && (
                   <>
                     <button type="button" className="btn btn-ghost btn-small" onClick={() => (setMode({ kind: "draw", id: null, pts: [] }), setSelRegion(null), setSelIsle(null))} disabled={busy}>
@@ -254,7 +285,7 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
               </>
             ) : (
               <>
-                <span className="chip chip-accent">{mode.kind === "add" ? "Clique sur la carte pour le placer" : "Clique sur la carte pour le déplacer"}</span>
+                <span className="chip chip-accent">{mode.kind === "add" ? `${ADD_LABEL[mode.as]} : clique sur la carte pour la placer` : "Clique sur la carte pour le déplacer"}</span>
                 <button type="button" className="btn btn-ghost btn-small" onClick={reset}>
                   Annuler
                 </button>
@@ -322,8 +353,11 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
                 );
               })}
 
-            {routePts.length > 1 && <path d={smooth(routePts)} className="map-route" />}
-            {fromPt && nextPt && !sameSpot && <path d={smooth([fromPt, nextPt])} className="map-route map-route-next" />}
+            {/* Le voyage, tronçon par tronçon : en mer (tirets) ou à pied (pointillés). */}
+            {legs.map((l, k) => (
+              <path key={k} d={smooth([l.a, l.b])} className={`map-route ${l.travel === "foot" ? "map-route-foot" : "map-route-sea"}`} />
+            ))}
+            {fromPt && nextPt && !sameSpot && <path d={smooth([fromPt, nextPt])} className={`map-route map-route-next ${group.nextTravel === "foot" ? "map-route-foot" : "map-route-sea"}`} />}
             {!level && next?.regionId && nextPt && (
               <circle cx={nextPt.x} cy={nextPt.y} r={30} className="map-pulse" style={{ color: regionById.get(next.regionId)?.color }} />
             )}
@@ -370,7 +404,8 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
                 </g>
               );
             })}
-            {shipAt && <Ship at={shipAt} />}
+            {shipAt && <Ship at={shipBeside ? { x: shipAt.x + 26, y: shipAt.y + 34 } : shipAt} />}
+            {groupPt && <Pawn at={groupPt} />}
             {draft && <circle cx={(draft.x / 100) * W} cy={(draft.y / 100) * h} r={14} className="map-draft" />}
             {mode.kind === "draw" && mode.pts.length > 0 && (
               <g className="map-drawing" style={{ color: (mode.id && regionById.get(mode.id)?.color) || "#fff" }}>
@@ -385,10 +420,13 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
         <p className="map-legend muted small">
           {!level && group.regions.length > 0 && <span>Clique deux fois sur une région pour ouvrir sa carte</span>}
           <span>
-            <i className="map-key map-key-route" /> Route du Navire
+            <i className="map-key map-key-sea" /> En mer
           </span>
           <span>
-            <i className="map-key map-key-next" /> Prochaine escale
+            <i className="map-key map-key-foot" /> À pied
+          </span>
+          <span>
+            <i className="map-key map-key-next" /> Prochaine étape
           </span>
           {isAdmin && (
             <span>
@@ -418,7 +456,7 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
               />
             )}
             {draft && isAdmin ? (
-              <IslandEditor key="new" group={group} regionId={level} at={draft} busy={busy} run={run} onDone={(ok) => (ok && reset(), !ok)} onCancel={reset} />
+              <IslandEditor key="new" group={group} regionId={level} at={draft} addAs={mode.kind === "add" ? mode.as : "place"} busy={busy} run={run} onDone={(ok) => (ok && reset(), !ok)} onCancel={reset} />
             ) : sel ? (
               <IslandPanel key={sel.id} island={sel} group={group} isAdmin={isAdmin} busy={busy} run={run} onMove={() => setMode({ kind: "move", id: sel.id })} onDeleted={() => setSelIsle(null)} />
             ) : selReg ? (
@@ -462,7 +500,7 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
                       <span className="stack-xs">
                         <span>{r.name}</span>
                         <span className="muted small">
-                          {harbor?.regionId === r.id ? "Le Navire y mouille" : next?.regionId === r.id ? "Prochaine escale" : ISLAND_STATUS[r.status].label}
+                          {groupIsle?.regionId === r.id ? "Le groupe est ici" : next?.regionId === r.id ? "Prochaine étape" : harbor?.regionId === r.id ? "Le Navire y mouille" : ISLAND_STATUS[r.status].label}
                           {n > 0 && ` · ${n} lieu${n > 1 ? "x" : ""}`}
                         </span>
                       </span>
@@ -473,6 +511,7 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
             </ul>
           </div>
         )}
+        {steps.length > 0 && <Voyage group={group} steps={steps} isAdmin={isAdmin} busy={busy} run={run} onPick={focusIsle} />}
         {places.length > 0 && (
           <div className="card stack">
             <h2 className="subtitle">{level ? "Les lieux" : group.regions.length ? "Hors des régions" : "Les îles"}</h2>
@@ -484,7 +523,7 @@ function GroupMap({ group, isAdmin, busy, run }: { group: MapGroup; isAdmin: boo
                     <span className="stack-xs">
                       <span>{i.name}</span>
                       <span className="muted small">
-                        {i.id === group.harborId ? "Le Navire y mouille" : i.id === group.nextId ? "Prochaine escale" : ISLAND_STATUS[i.status].label}
+                        {i.id === groupIsle?.id ? "Le groupe est ici" : i.id === group.nextId ? "Prochaine étape" : i.id === group.harborId ? "Le Navire y mouille" : ISLAND_STATUS[i.status].label}
                         {i.visits.length > 0 && ` · ${i.visits.length} séance${i.visits.length > 1 ? "s" : ""}`}
                       </span>
                     </span>
@@ -523,6 +562,7 @@ function RegionPanel({
 }) {
   const [editing, setEditing] = useState(false);
   const harborHere = group.islands.some((i) => i.id === group.harborId && i.regionId === region.id);
+  const groupHere = group.islands.some((i) => i.id === group.groupAt && i.regionId === region.id);
   const nextHere = group.islands.some((i) => i.id === group.nextId && i.regionId === region.id);
   const places = group.islands.filter((i) => i.regionId === region.id).length;
   if (editing) return <RegionEditor group={group} region={region} points={region.points} busy={busy} run={run} onDone={(ok) => ok && setEditing(false)} onCancel={() => setEditing(false)} />;
@@ -531,9 +571,10 @@ function RegionPanel({
       <div className="stack-xs">
         <span className="chips">
           <span className="chip">Région</span>
-          {harborHere && <span className="chip chip-accent">⚓ Le Navire y mouille</span>}
-          {nextHere && <span className="chip chip-accent">Prochaine escale</span>}
-          {!harborHere && !nextHere && <span className="chip">{ISLAND_STATUS[region.status].label}</span>}
+          {groupHere && <span className="chip chip-accent">Le groupe est ici</span>}
+          {harborHere && <span className="chip">Le Navire y mouille</span>}
+          {nextHere && <span className="chip chip-accent">Prochaine étape</span>}
+          {!groupHere && !harborHere && !nextHere && <span className="chip">{ISLAND_STATUS[region.status].label}</span>}
         </span>
         <h2 className="subtitle">{region.name}</h2>
       </div>
@@ -651,14 +692,16 @@ function IslandPanel({ island, group, isAdmin, busy, run, onMove, onDeleted }: {
   const [editing, setEditing] = useState(false);
   const isHarbor = island.id === group.harborId;
   const isNext = island.id === group.nextId;
+  const isHere = island.id === group.groupAt;
   if (editing) return <IslandEditor group={group} island={island} busy={busy} run={run} onDone={(ok) => (ok && setEditing(false), !ok)} onCancel={() => setEditing(false)} />;
   return (
     <div className="card stack map-panel" style={{ ["--isle-c" as string]: island.color }}>
       <div className="stack-xs">
         <span className="chips">
-          {isHarbor && <span className="chip chip-accent">⚓ Le Navire y mouille</span>}
-          {isNext && <span className="chip chip-accent">Prochaine escale</span>}
-          {!isHarbor && !isNext && <span className="chip">{ISLAND_STATUS[island.status].label}</span>}
+          {isHere && <span className="chip chip-accent">Le groupe est ici</span>}
+          {isHarbor && <span className="chip">Le Navire y mouille</span>}
+          {isNext && <span className="chip chip-accent">Prochaine étape, {how(group.nextTravel)}</span>}
+          {!isHere && !isHarbor && !isNext && <span className="chip">{ISLAND_STATUS[island.status].label}</span>}
         </span>
         <h2 className="subtitle">{island.name}</h2>
       </div>
@@ -680,12 +723,41 @@ function IslandPanel({ island, group, isAdmin, busy, run, onMove, onDeleted }: {
       )}
       {isAdmin && (
         <div className="stack map-admin">
+          {!isHere && (
+            <div className="stack-xs">
+              <span className="label">Le groupe s&apos;y rend</span>
+              <div className="chips">
+                <button type="button" className="btn btn-small" disabled={busy} onClick={() => run(goToAction(group.id, island.id, "foot"))}>
+                  À pied
+                </button>
+                <button type="button" className="btn btn-small" disabled={busy} onClick={() => run(goToAction(group.id, island.id, "sea"))}>
+                  En mer
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="stack-xs">
+            <span className="label">{isNext ? "Prochaine étape annoncée" : "Annoncer comme prochaine étape"}</span>
+            <div className="chips">
+              {isNext ? (
+                <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => run(setNextAction(group.id, null))}>
+                  Annuler l&apos;annonce
+                </button>
+              ) : (
+                <>
+                  <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => run(setNextAction(group.id, island.id, "foot"))}>
+                    À pied
+                  </button>
+                  <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => run(setNextAction(group.id, island.id, "sea"))}>
+                    En mer
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
           <div className="chips">
-            <button type="button" className="btn btn-small" disabled={busy} onClick={() => run(setHarborAction(group.id, isHarbor ? null : island.id))}>
-              {isHarbor ? "Lever l'ancre" : "⚓ Le Navire mouille ici"}
-            </button>
-            <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => run(setNextAction(group.id, isNext ? null : island.id))}>
-              {isNext ? "Annuler l'annonce" : "Annoncer comme prochaine escale"}
+            <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => run(setHarborAction(group.id, isHarbor ? null : island.id))}>
+              {isHarbor ? "Le Navire lève l'ancre" : "Le Navire mouille ici"}
             </button>
           </div>
           <div className="chips">
@@ -718,6 +790,7 @@ function IslandEditor({
   island,
   regionId,
   at,
+  addAs = "place",
   busy,
   run,
   onDone,
@@ -728,6 +801,8 @@ function IslandEditor({
   /** Région où placer une nouvelle île (null : carte de l'archipel). */
   regionId?: string | null;
   at?: { x: number; y: number };
+  /** Création : étape à pied, étape en mer ou lieu seul (modifiable dans le formulaire). */
+  addAs?: AddKind;
   busy: boolean;
   run: Run;
   onDone: (ok: boolean) => void;
@@ -739,12 +814,14 @@ function IslandEditor({
   const [description, setDescription] = useState(island?.description ?? "");
   const startRegion = island ? island.regionId : (regionId ?? null);
   const [where, setWhere] = useState<string>(startRegion ?? "");
+  const [kind, setKind] = useState<AddKind>(addAs);
   const save = async () => {
     // Changer de carte : l'île repart au centre de sa nouvelle carte, le MJ la déplace ensuite.
     const moved = (where || null) !== startRegion;
     const x = moved ? 50 : (island?.x ?? at?.x ?? 50);
     const y = moved ? 50 : (island?.y ?? at?.y ?? 50);
-    const ok = await run(saveIslandAction({ id: island?.id ?? null, groupId: group.id, regionId: where || null, name, color, status, description, x, y }));
+    const step = !island && kind !== "place" ? kind : null;
+    const ok = await run(saveIslandAction({ id: island?.id ?? null, groupId: group.id, regionId: where || null, name, color, status, description, x, y, step }));
     onDone(ok);
   };
   return (
@@ -755,7 +832,23 @@ function IslandEditor({
         void save();
       }}
     >
-      <h2 className="subtitle">{island ? `Modifier ${island.name}` : regionId ? "Nouveau lieu" : "Nouvelle île"}</h2>
+      <h2 className="subtitle">{island ? `Modifier ${island.name}` : kind === "place" ? (regionId ? "Nouveau lieu" : "Nouvelle île") : `Nouvelle étape, ${how(kind)}`}</h2>
+      {!island && (
+        <fieldset className="field">
+          <legend className="label">Ce que tu ajoutes</legend>
+          <div className="map-kinds">
+            {(["foot", "sea", "place"] as const).map((k) => (
+              <label key={k} className={`map-kind${kind === k ? " on" : ""}`}>
+                <input type="radio" name="add-kind" value={k} checked={kind === k} onChange={() => setKind(k)} />
+                <span>
+                  <strong>{ADD_LABEL[k]}</strong>
+                  <span className="muted small">{k === "place" ? "Un lieu sur la carte, hors du voyage" : `Le groupe s'y rend ${how(k)} : la route se prolonge`}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
       <label className="field">
         <span className="label">Nom</span>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Île Givre" required autoFocus />
@@ -856,6 +949,65 @@ function MapImageEditor({ group, busy, run, onDone }: { group: MapGroup; busy: b
         </button>
       </div>
     </form>
+  );
+}
+
+/** Le voyage du groupe : les étapes dans l'ordre, le mode de chacune, et l'endroit où il se trouve. */
+function Voyage({ group, steps, isAdmin, busy, run, onPick }: { group: MapGroup; steps: { isle: IslandView; travel: Travel; index: number }[]; isAdmin: boolean; busy: boolean; run: Run; onPick: (id: string) => void }) {
+  return (
+    <div className="card stack">
+      <h2 className="subtitle">Le voyage</h2>
+      <ol className="map-steps">
+        {steps.map((s, k) => {
+          const last = k === steps.length - 1;
+          return (
+            <li key={`${s.isle.id}-${k}`} className={last ? "here" : undefined}>
+              <span className={`map-step-mode ${s.travel}`} aria-hidden="true" />
+              <button type="button" className="map-step-name" onClick={() => onPick(s.isle.id)}>
+                <span>{s.isle.name}</span>
+                <span className="muted small">
+                  {k === 0 ? "Départ" : how(s.travel)}
+                  {last ? " · le groupe est ici" : ""}
+                  {s.isle.id === group.harborId ? " · le Navire y mouille" : ""}
+                </span>
+              </button>
+              {isAdmin && k > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-small map-step-switch"
+                  disabled={busy}
+                  title={`Passer ${s.travel === "foot" ? "en mer" : "à pied"}`}
+                  onClick={() => run(setStepTravelAction(group.id, s.index, s.travel === "foot" ? "sea" : "foot"))}
+                >
+                  {s.travel === "foot" ? "À pied" : "En mer"}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {!group.harborId && <p className="muted small">Le Navire n&apos;est à aucun port : en mer, ou absent de ce scénario.</p>}
+      {isAdmin && (
+        <button type="button" className="btn btn-ghost btn-small" disabled={busy} onClick={() => run(removeLastStepAction(group.id))}>
+          Retirer la dernière étape
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Le pion du groupe : un cercle ambre et trois silhouettes. */
+function Pawn({ at }: { at: { x: number; y: number } }) {
+  return (
+    <g transform={`translate(${at.x} ${at.y})`} className="map-pawn" aria-hidden="true">
+      <circle r="15" className="map-pawn-disc" />
+      {[-6, 0, 6].map((dx) => (
+        <g key={dx}>
+          <circle cx={dx} cy={-3.5} r={2.7} className="map-pawn-ink" />
+          <path d={`M${dx - 3.4} 8 Q${dx} -0.5 ${dx + 3.4} 8 Z`} className="map-pawn-ink" />
+        </g>
+      ))}
+    </g>
   );
 }
 

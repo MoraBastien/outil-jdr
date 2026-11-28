@@ -1,14 +1,14 @@
 "use server";
 // Carte de l'archipel : le MJ dessine les régions sur la carte de l'archipel, place les îles (sur l'archipel ou dans
-// la carte d'une région), indique où mouille le Navire et la prochaine escale.
-// La route se trace toute seule à partir des séances de la chronique rattachées à une île.
+// la carte d'une région), trace le voyage du groupe étape par étape (en mer ou à pied), indique où mouille le Navire
+// et la prochaine étape. Le groupe se trouve à sa dernière étape ; le Navire peut l'attendre ailleurs, ou être absent.
 
 import { requireUser, canUseTool } from "@/lib/auth";
-import { getChronicle, getGroups, getIslands, getRegions, getShops, randomUUID, updateDb, type Db, type Island, type Region, type User } from "@/lib/db";
+import { getChronicle, getGroups, getIslands, getRegions, getShops, randomUUID, updateDb, type Db, type Group, type Island, type Region, type Travel, type User } from "@/lib/db";
 import { visibleGroups } from "@/lib/groups";
 import { logActivity } from "@/lib/activity";
 import { CARTE_TOOL_ID, centerOf, cleanMapImage, cleanPoints, isIsleColor, isIslandStatus, isRegionColor, REGION_COLORS, SEA_COLOR, type IslandStatusId } from "./meta";
-import { routeOf } from "./route";
+import { itineraryOf, routeOf, type RouteStep } from "./route";
 
 export type IslandView = {
   id: string;
@@ -40,22 +40,64 @@ export type MapGroup = {
   name: string;
   islands: IslandView[];
   regions: RegionView[];
-  /** Îles de la route, dans l'ordre des séances (sans répétition consécutive). */
-  route: string[];
+  /** Étapes du voyage, dans l'ordre, chacune gagnée en mer ou à pied (sans répétition consécutive). */
+  route: RouteStep[];
+  /** Lieu où se trouve le groupe : sa dernière étape. */
+  groupAt: string | null;
   harborId: string | null;
   nextId: string | null;
+  nextTravel: Travel;
   /** Image de fond de la carte (absent : carte dessinée par le site). */
   mapImage: string | null;
 };
 export type MapView = { isAdmin: boolean; groups: MapGroup[] };
 export type MapResult = { ok: true; view: MapView } | { ok: false; error: string };
-export type IslandInput = { id?: string | null; groupId: string; regionId?: string | null; name: string; color: string; x: number; y: number; status: string; description: string };
+export type IslandInput = {
+  id?: string | null;
+  groupId: string;
+  regionId?: string | null;
+  name: string;
+  color: string;
+  x: number;
+  y: number;
+  status: string;
+  description: string;
+  /** Création seulement : le lieu devient une étape du voyage, gagnée en mer ou à pied (absent : lieu seul). */
+  step?: Travel | null;
+};
 export type RegionInput = { id?: string | null; groupId: string; name: string; color: string; status: string; description: string; points: number[]; mapImage: string | null };
 
 async function requireToolUser(): Promise<User> {
   const user = await requireUser();
   if (!canUseTool(user, CARTE_TOOL_ID)) throw new Error("Accès refusé à cet outil.");
   return user;
+}
+
+const isTravel = (v: unknown): v is Travel => v === "sea" || v === "foot";
+const how = (t: Travel) => (t === "foot" ? "à pied" : "en mer");
+
+/**
+ * Les étapes d'un groupe, prêtes à être modifiées : la première fois, elles reprennent la route des séances
+ * (toutes en mer), pour que les anciennes données ne perdent pas leur route.
+ */
+function stepsOf(db: Db, g: Group) {
+  if (!g.itinerary) {
+    const own = new Set((db.islands ?? []).filter((i) => i.groupId === g.id).map((i) => i.id));
+    const now = new Date().toISOString();
+    g.itinerary = routeOf(g.id, db.chronicle ?? [], true, (id) => own.has(id)).map((islandId) => ({ islandId, travel: "sea" as const, at: now }));
+  }
+  return g.itinerary;
+}
+
+/** Le groupe gagne une étape : elle s'ajoute au voyage, le lieu devient « visité ». */
+function goTo(db: Db, g: Group, island: Island, travel: Travel) {
+  const steps = stepsOf(db, g);
+  if (steps.at(-1)?.islandId === island.id) return "Le groupe est déjà à cet endroit.";
+  steps.push({ islandId: island.id, travel, at: new Date().toISOString() });
+  island.status = "visited";
+  if (g.nextIslandId === island.id) g.nextIslandId = null;
+  logActivity(db, { groupId: g.id, kind: "harbor", text: `Le groupe a gagné ${island.name} ${how(travel)}.`, href: "/outils/carte", key: "step" });
+  return null;
 }
 
 const clamp = (n: unknown) => Math.min(96, Math.max(4, Math.round(Number(n) * 10) / 10 || 50));
@@ -98,9 +140,11 @@ async function view(user: User): Promise<MapView> {
         center: centerOf(r.points),
         mapImage: r.mapImage ?? null,
       })),
-      route: routeOf(g.id, sessions, isAdmin, (id) => ids.has(id)),
+      route: itineraryOf(g, sessions, isAdmin, (id) => ids.has(id)),
+      groupAt: itineraryOf(g, sessions, isAdmin, (id) => ids.has(id)).at(-1)?.id ?? null,
       harborId: g.harborIslandId && ids.has(g.harborIslandId) ? g.harborIslandId : null,
       nextId: g.nextIslandId && ids.has(g.nextIslandId) ? g.nextIslandId : null,
+      nextTravel: g.nextTravel ?? "sea",
       mapImage: g.mapImage ?? null,
     });
   }
@@ -126,8 +170,10 @@ export async function saveIslandAction(input: IslandInput): Promise<MapResult> {
   const status = isIslandStatus(input?.status) ? input.status : "seen";
   if (!name) return { ok: false, error: "Donne un nom à l'île." };
   const regionId = input?.regionId ? String(input.regionId) : null;
+  const step = !input?.id && isTravel(input?.step) ? input.step : null;
   return adminChange((db) => {
-    if (!(db.groups ?? []).some((g) => g.id === input.groupId)) return "Groupe introuvable.";
+    const group = (db.groups ?? []).find((g) => g.id === input.groupId);
+    if (!group) return "Groupe introuvable.";
     if (regionId && !(db.regions ?? []).some((r) => r.id === regionId && r.groupId === input.groupId)) return "Région introuvable.";
     const now = new Date().toISOString();
     const list = (db.islands ??= []);
@@ -138,6 +184,8 @@ export async function saveIslandAction(input: IslandInput): Promise<MapResult> {
     } else {
       const island: Island = { id: randomUUID(), groupId: input.groupId, regionId, name, description, color, status, x: clamp(input.x), y: clamp(input.y), createdAt: now, updatedAt: now };
       list.push(island);
+      // Étape à pied ou en mer : le groupe s'y rend aussitôt ; lieu seul : il reste hors du voyage.
+      if (step) return goTo(db, group, island, step);
     }
     return null;
   });
@@ -164,6 +212,7 @@ export async function deleteIslandAction(id: string): Promise<MapResult> {
     for (const g of db.groups ?? []) {
       if (g.harborIslandId === id) g.harborIslandId = null;
       if (g.nextIslandId === id) g.nextIslandId = null;
+      if (g.itinerary) g.itinerary = g.itinerary.filter((s) => s.islandId !== id);
     }
     return null;
   });
@@ -189,8 +238,45 @@ export async function setHarborAction(groupId: string, islandId: string | null):
   });
 }
 
-/** Annonce la prochaine escale (`null` : aucune). */
-export async function setNextAction(groupId: string, islandId: string | null): Promise<MapResult> {
+/** Le groupe se rend sur un lieu existant, en mer ou à pied : une nouvelle étape du voyage. */
+export async function goToAction(groupId: string, islandId: string, travel: Travel): Promise<MapResult> {
+  if (!isTravel(travel)) return { ok: false, error: "Choisis « à pied » ou « en mer »." };
+  return adminChange((db) => {
+    const g = (db.groups ?? []).find((x) => x.id === groupId);
+    if (!g) return "Groupe introuvable.";
+    const island = (db.islands ?? []).find((i) => i.id === islandId && i.groupId === groupId);
+    if (!island) return "Lieu introuvable.";
+    return goTo(db, g, island, travel);
+  });
+}
+
+/** Change le moyen de déplacement d'une étape (index dans le voyage). */
+export async function setStepTravelAction(groupId: string, index: number, travel: Travel): Promise<MapResult> {
+  if (!isTravel(travel)) return { ok: false, error: "Choisis « à pied » ou « en mer »." };
+  return adminChange((db) => {
+    const g = (db.groups ?? []).find((x) => x.id === groupId);
+    if (!g) return "Groupe introuvable.";
+    const step = stepsOf(db, g)[index];
+    if (!step) return "Étape introuvable.";
+    step.travel = travel;
+    return null;
+  });
+}
+
+/** Retire la dernière étape (une erreur de saisie) : le groupe revient à l'étape précédente. */
+export async function removeLastStepAction(groupId: string): Promise<MapResult> {
+  return adminChange((db) => {
+    const g = (db.groups ?? []).find((x) => x.id === groupId);
+    if (!g) return "Groupe introuvable.";
+    const steps = stepsOf(db, g);
+    if (!steps.length) return "Aucune étape à retirer.";
+    steps.pop();
+    return null;
+  });
+}
+
+/** Annonce la prochaine étape (`null` : aucune) et comment le groupe la gagnera. */
+export async function setNextAction(groupId: string, islandId: string | null, travel: Travel = "sea"): Promise<MapResult> {
   return adminChange((db) => {
     const g = (db.groups ?? []).find((x) => x.id === groupId);
     if (!g) return "Groupe introuvable.";
@@ -201,8 +287,9 @@ export async function setNextAction(groupId: string, islandId: string | null): P
     const island = (db.islands ?? []).find((i) => i.id === islandId && i.groupId === groupId);
     if (!island) return "Île introuvable.";
     g.nextIslandId = island.id;
+    g.nextTravel = isTravel(travel) ? travel : "sea";
     if (island.status === "hidden") island.status = "seen";
-    logActivity(db, { groupId, kind: "harbor", text: `Prochaine escale annoncée : ${island.name}.`, href: "/outils/carte", key: "next" });
+    logActivity(db, { groupId, kind: "harbor", text: `Prochaine étape annoncée : ${island.name}, ${how(g.nextTravel)}.`, href: "/outils/carte", key: "next" });
     return null;
   });
 }

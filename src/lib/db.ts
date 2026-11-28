@@ -204,12 +204,29 @@ export type Quest = {
 
 /**
  * Groupe de jeu (une table, une campagne). Les membres sont les joueurs dont `groupIds` contient son id.
- * `harborIslandId` : île où mouille le Navire (ses échoppes sont ouvertes).
+ * `harborIslandId` : île où mouille le Navire (ses échoppes sont ouvertes) ; null : le Navire n'est à aucun port (en mer, ou absent du scénario).
+ * `itinerary` : les étapes du voyage posées sur la carte, dans l'ordre ; la dernière est l'endroit où se trouve le groupe.
+ *   Absent (anciennes données) : la route se déduit des séances de la chronique, toutes en mer.
+ * `nextTravel` : comment le groupe gagnera la prochaine étape annoncée.
  * `nextIslandId` : prochaine escale annoncée.
  * `mapImage` : image de fond de la carte du groupe (chemin dans `public/` ou URL https). Absent : carte dessinée par le site.
  * `shipName` : nom du navire du groupe (outil « Équipage »). Absent : « le Navire ».
  */
-export type Group = { id: string; name: string; createdAt: string; harborIslandId?: string | null; nextIslandId?: string | null; mapImage?: string | null; shipName?: string | null };
+/** Moyen de déplacement pour gagner une étape : en mer (le Navire) ou à pied. */
+export type Travel = "sea" | "foot";
+/** Une étape du voyage du groupe (outil « Carte »). */
+export type ItineraryStep = { islandId: string; travel: Travel; at: string };
+export type Group = {
+  id: string;
+  name: string;
+  createdAt: string;
+  harborIslandId?: string | null;
+  nextIslandId?: string | null;
+  nextTravel?: Travel | null;
+  itinerary?: ItineraryStep[];
+  mapImage?: string | null;
+  shipName?: string | null;
+};
 
 /**
  * Membre d'équipage du navire d'un groupe (outil « Équipage »).

@@ -20,7 +20,7 @@ import { membersOf } from "./groups";
 import { derive, shortLabel } from "@/tools/character/rules";
 import type { CharacterState } from "@/tools/character/types";
 import { detectedEvents } from "@/tools/chronicle/events";
-import { routeOf } from "@/tools/carte/route";
+import { itineraryOf } from "@/tools/carte/route";
 import { slotEnd, slotKey } from "@/tools/planning/types";
 import { tableToday } from "@/tools/planning/summary";
 import type { Isle } from "./dashboard";
@@ -225,7 +225,7 @@ export async function getAdminDashboard(wantedGroupId?: string): Promise<AdminDa
     todos.sort((a, b) => order[a.weight] - order[b.weight]);
 
     // --- Route
-    const routeIds = routeOf(g.id, sessions, true, (id) => byId.has(id));
+    const routeIds = itineraryOf(g, sessions, true, (id) => byId.has(id)).map((s) => s.id);
     if (harborIsl && routeIds.at(-1) !== harborIsl.id) routeIds.push(harborIsl.id);
     const route = routeIds.map((id) => ({ ...isle(byId.get(id)!), here: id === harborIsl?.id }));
 

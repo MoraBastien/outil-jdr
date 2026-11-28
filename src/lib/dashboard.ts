@@ -21,7 +21,7 @@ import { derive, shortLabel } from "@/tools/character/rules";
 import type { CharacterState } from "@/tools/character/types";
 import { getSpell } from "@/tools/grimoire/data/spells";
 import { getClass } from "@/tools/character/data/classes";
-import { routeOf } from "@/tools/carte/route";
+import { itineraryOf } from "@/tools/carte/route";
 import { SEA_COLOR } from "@/tools/carte/meta";
 import { toCp } from "@/tools/marche/meta";
 import { slotKey, slotEnd } from "@/tools/planning/types";
@@ -167,7 +167,7 @@ export async function getPlayerDashboard(user: User, wantedGroupId?: string): Pr
   const byId = new Map(groupIslands.map((i) => [i.id, i]));
   const harborIsl = g.harborIslandId ? byId.get(g.harborIslandId) : undefined;
   const nextIsl = g.nextIslandId ? byId.get(g.nextIslandId) : undefined;
-  const routeIds = routeOf(g.id, sessions, false, (id) => byId.has(id));
+  const routeIds = itineraryOf(g, sessions, false, (id) => byId.has(id)).map((s) => s.id);
   if (harborIsl && routeIds.at(-1) !== harborIsl.id) routeIds.push(harborIsl.id);
   const route = routeIds.map((id) => ({ ...isle(byId.get(id)!), here: id === harborIsl?.id }));
 
